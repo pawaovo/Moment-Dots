@@ -1522,14 +1522,20 @@ function isWeixinEditPage(url) {
 chrome.runtime.onInstalled.addListener(async (details) => {
   console.log('动态发布助手已安装/更新', details);
 
-  // 清理旧数据和缓存
-  chrome.storage.local.clear().catch(console.error);
+  try {
+    // 清理旧数据和缓存
+    await chrome.storage.local.clear();
+    console.log('旧数据已清理');
 
-  // 初始化提示词助手数据
-  await initializePromptData();
+    // 初始化提示词助手数据
+    await initializePromptData();
+    console.log('提示词助手数据初始化完成');
 
-  // 验证平台配置完整性
-  validatePlatformConfig();
+    // 验证平台配置完整性
+    validatePlatformConfig();
+  } catch (error) {
+    console.error('扩展初始化失败:', error);
+  }
 });
 
 /**

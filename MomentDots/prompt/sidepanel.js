@@ -32,77 +32,6 @@ class PromptToastManager {
             }, 300);
         }, 3000);
     }
-
-    async exportData() {
-        try {
-            const data = {
-                categories: this.categories,
-                prompts: this.prompts,
-                settings: this.settings,
-                exportTime: new Date().toISOString()
-            };
-
-            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `prompt-data-${new Date().toISOString().split('T')[0]}.json`;
-            a.click();
-
-            URL.revokeObjectURL(url);
-            PromptToastManager.show('导出成功', 'success');
-        } catch (error) {
-            console.error('导出失败:', error);
-            PromptToastManager.show('导出失败', 'error');
-        }
-    }
-
-    async importData(file) {
-        try {
-            const text = await file.text();
-            const data = JSON.parse(text);
-
-            if (!data.categories || !data.prompts) {
-                throw new Error('数据格式不正确');
-            }
-
-            // 合并数据
-            const newCategories = [...new Set([...this.categories, ...data.categories])];
-            const newPrompts = [...this.prompts];
-
-            // 添加新提示词（避免重复）
-            data.prompts.forEach(prompt => {
-                if (!newPrompts.find(p => p.id === prompt.id)) {
-                    newPrompts.push({
-                        ...prompt,
-                        id: prompt.id || 'prompt_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9)
-                    });
-                }
-            });
-
-            // 保存数据
-            await chrome.storage.local.set({
-                promptCategories: newCategories,
-                promptPrompts: newPrompts,
-                promptSettings: data.settings || this.settings
-            });
-
-            // 重新加载数据
-            await this.loadData();
-            this.render();
-
-            PromptToastManager.show(`导入成功，新增 ${data.prompts.length} 个提示词`, 'success');
-        } catch (error) {
-            console.error('导入失败:', error);
-            PromptToastManager.show('导入失败：' + error.message, 'error');
-        }
-    }
-
-    async refresh() {
-        await this.loadData();
-        this.render();
-    }
 }
 
 // 主要应用逻辑
@@ -123,13 +52,31 @@ class PromptApp {
     }
 
     async init() {
-        this.cacheElements();
-        await this.loadData();
-        this.bindEvents();
-        this.render();
+        console.log('PromptApp 开始初始化...');
+
+        try {
+            console.log('1. 缓存DOM元素...');
+            this.cacheElements();
+
+            console.log('2. 加载数据...');
+            await this.loadData();
+
+            console.log('3. 绑定事件...');
+            this.bindEvents();
+
+            console.log('4. 渲染界面...');
+            this.render();
+
+            console.log('PromptApp 初始化完成');
+        } catch (error) {
+            console.error('PromptApp 初始化失败:', error);
+            throw error;
+        }
     }
 
     cacheElements() {
+        console.log('开始缓存DOM元素...');
+
         // 缓存常用的DOM元素
         this.elements = {
             addPromptBtn: document.getElementById('promptAddBtn'),
@@ -154,13 +101,39 @@ class PromptApp {
             apiEndpoint: document.getElementById('promptApiEndpoint'),
             defaultModel: document.getElementById('promptDefaultModel')
         };
+
+        // 检查关键元素是否找到
+        const missingElements = [];
+        if (!this.elements.addPromptBtn) missingElements.push('promptAddBtn');
+        if (!this.elements.categoryTabs) missingElements.push('promptCategoryTabs');
+        if (!this.elements.promptList) missingElements.push('promptList');
+
+        if (missingElements.length > 0) {
+            console.warn('以下DOM元素未找到:', missingElements);
+        } else {
+            console.log('所有关键DOM元素已成功缓存');
+        }
     }
 
     async loadData() {
-        const data = await chrome.storage.local.get(this.STORAGE_KEYS);
-        this.categories = data.promptCategories || ['全部'];
-        this.prompts = data.promptPrompts || [];
-        this.settings = data.promptSettings || {};
+        console.log('开始加载数据，存储键:', this.STORAGE_KEYS);
+
+        try {
+            const data = await chrome.storage.local.get(this.STORAGE_KEYS);
+            console.log('从存储中获取的数据:', data);
+
+            this.categories = data.promptCategories || ['全部'];
+            this.prompts = data.promptPrompts || [];
+            this.settings = data.promptSettings || {};
+
+            console.log('数据加载完成:');
+            console.log('- 分类数量:', this.categories.length);
+            console.log('- 提示词数量:', this.prompts.length);
+            console.log('- 设置:', this.settings);
+        } catch (error) {
+            console.error('加载数据失败:', error);
+            throw error;
+        }
     }
 
     async init() {
@@ -814,11 +787,43 @@ if (document.readyState === 'loading') {
 // 初始化应用
 window.PromptToastManager = PromptToastManager;
 
+// 等待DOM和Chrome扩展API都准备好后初始化
+function initializePromptApp() {
+    console.log('开始初始化提示词助手应用...');
+
+    // 检查Chrome扩展API是否可用
+    if (typeof chrome === 'undefined' || !chrome.storage) {
+        console.error('Chrome扩展API不可用');
+        document.body.innerHTML = `
+            <div style="display: flex; align-items: center; justify-content: center; height: 100vh; text-align: center; color: #666;">
+                <div>
+                    <h3>Chrome扩展API不可用</h3>
+                    <p>请确保在Chrome扩展环境中运行此页面</p>
+                </div>
+            </div>
+        `;
+        return;
+    }
+
+    try {
+        window.promptApp = new PromptApp();
+        console.log('提示词助手应用初始化完成');
+    } catch (error) {
+        console.error('提示词助手应用初始化失败:', error);
+        document.body.innerHTML = `
+            <div style="display: flex; align-items: center; justify-content: center; height: 100vh; text-align: center; color: #666;">
+                <div>
+                    <h3>应用初始化失败</h3>
+                    <p>错误信息: ${error.message}</p>
+                </div>
+            </div>
+        `;
+    }
+}
+
 // 等待DOM加载完成后初始化
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-        window.promptApp = new PromptApp();
-    });
+    document.addEventListener('DOMContentLoaded', initializePromptApp);
 } else {
-    window.promptApp = new PromptApp();
+    initializePromptApp();
 }
