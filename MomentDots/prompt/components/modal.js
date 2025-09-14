@@ -271,7 +271,7 @@ class PromptRewriteModalManager {
 
         // 监听弹窗事件
         document.addEventListener('promptModal:open', (e) => {
-            if (e.detail.modalId === 'rewriteModal') {
+            if (e.detail.modalId === 'promptRewriteModal') {
                 this.handleRewriteModalOpen(e.detail.data);
             }
         });
@@ -289,17 +289,17 @@ class PromptRewriteModalManager {
 
     cacheElements() {
         this.elements = {
-            originalText: document.getElementById('originalText'),
-            rewrittenText: document.getElementById('rewrittenText'),
-            rewriteBtn: document.getElementById('rewriteBtn'),
-            copyBtn: document.getElementById('copyResultBtn'),
-            loadingIndicator: document.getElementById('loadingIndicator')
+            originalText: document.getElementById('promptOriginalText'),
+            rewrittenText: document.getElementById('promptRewrittenText'),
+            rewriteBtn: document.getElementById('promptRewriteBtn'),
+            copyBtn: document.getElementById('promptCopyResultBtn'),
+            loadingIndicator: document.getElementById('promptLoadingIndicator')
         };
     }
 
     openRewriteModal(prompt) {
         this.currentPrompt = prompt;
-        this.modalManager.openModal('rewriteModal', { prompt });
+        this.modalManager.openModal('promptRewriteModal', { prompt });
     }
 
     handleRewriteModalOpen(data) {
