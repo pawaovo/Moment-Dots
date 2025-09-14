@@ -186,9 +186,18 @@ class PromptApp {
     }
 
     bindEvents() {
+        // 确保modal管理器已初始化
+        if (!window.promptFormModalManager && window.createPromptModalManagers) {
+            window.createPromptModalManagers();
+        }
+
         // 使用缓存的DOM元素绑定事件
         this.elements.addPromptBtn?.addEventListener('click', () => {
-            window.promptFormModalManager.openAddModal();
+            if (window.promptFormModalManager) {
+                window.promptFormModalManager.openAddModal();
+            } else {
+                console.error('promptFormModalManager 未初始化');
+            }
         });
 
         this.elements.settingsBtn?.addEventListener('click', () => {
@@ -221,14 +230,31 @@ class PromptApp {
     }
 
     bindModalCloseEvents() {
+        // 确保modal管理器已初始化
+        if (!window.promptModalManager && window.createPromptModalManagers) {
+            window.createPromptModalManagers();
+        }
+
         // 使用缓存的DOM元素和统一的事件处理
         const modalEvents = [
-            { element: this.elements.closeModalBtn, action: () => window.promptModalManager.closeModal('promptModal') },
-            { element: this.elements.cancelBtn, action: () => window.promptModalManager.closeModal('promptModal') },
-            { element: this.elements.closeRewriteBtn, action: () => window.promptModalManager.closeModal('promptRewriteModal') },
-            { element: this.elements.cancelRewriteBtn, action: () => window.promptModalManager.closeModal('promptRewriteModal') },
-            { element: this.elements.closeSettingsBtn, action: () => window.promptModalManager.closeModal('promptSettingsModal') },
-            { element: this.elements.cancelSettingsBtn, action: () => window.promptModalManager.closeModal('promptSettingsModal') },
+            { element: this.elements.closeModalBtn, action: () => {
+                if (window.promptModalManager) window.promptModalManager.closeModal('promptModal');
+            }},
+            { element: this.elements.cancelBtn, action: () => {
+                if (window.promptModalManager) window.promptModalManager.closeModal('promptModal');
+            }},
+            { element: this.elements.closeRewriteBtn, action: () => {
+                if (window.promptModalManager) window.promptModalManager.closeModal('promptRewriteModal');
+            }},
+            { element: this.elements.cancelRewriteBtn, action: () => {
+                if (window.promptModalManager) window.promptModalManager.closeModal('promptRewriteModal');
+            }},
+            { element: this.elements.closeSettingsBtn, action: () => {
+                if (window.promptModalManager) window.promptModalManager.closeModal('promptSettingsModal');
+            }},
+            { element: this.elements.cancelSettingsBtn, action: () => {
+                if (window.promptModalManager) window.promptModalManager.closeModal('promptSettingsModal');
+            }},
             { element: this.elements.saveSettingsBtn, action: () => this.saveSettings() }
         ];
 
@@ -328,12 +354,25 @@ class PromptApp {
     }
 
     handlePromptAction(action, prompt) {
+        // 确保modal管理器已初始化
+        if (!window.promptFormModalManager && window.createPromptModalManagers) {
+            window.createPromptModalManagers();
+        }
+
         switch (action) {
             case 'rewrite':
-                window.promptRewriteModalManager.openRewriteModal(prompt);
+                if (window.promptRewriteModalManager) {
+                    window.promptRewriteModalManager.openRewriteModal(prompt);
+                } else {
+                    console.error('promptRewriteModalManager 未初始化');
+                }
                 break;
             case 'edit':
-                window.promptFormModalManager.openEditModal(prompt.id, prompt);
+                if (window.promptFormModalManager) {
+                    window.promptFormModalManager.openEditModal(prompt.id, prompt);
+                } else {
+                    console.error('promptFormModalManager 未初始化');
+                }
                 break;
             case 'delete':
                 this.deletePrompt(prompt.id);
@@ -358,6 +397,11 @@ class PromptApp {
     }
 
     openSettingsModal() {
+        // 确保modal管理器已初始化
+        if (!window.promptModalManager && window.createPromptModalManagers) {
+            window.createPromptModalManagers();
+        }
+
         // 填充当前设置
         if (this.elements.apiKey && this.settings.models?.[0]?.apiKey) {
             this.elements.apiKey.value = this.settings.models[0].apiKey;
@@ -369,7 +413,11 @@ class PromptApp {
         // 加载模型选项
         this.loadModelOptions();
 
-        window.promptModalManager.openModal('promptSettingsModal');
+        if (window.promptModalManager) {
+            window.promptModalManager.openModal('promptSettingsModal');
+        } else {
+            console.error('promptModalManager 未初始化');
+        }
     }
 
     async loadModelOptions() {
@@ -420,7 +468,9 @@ class PromptApp {
                 await window.promptAIService.updateSettings(newSettings);
             }
 
-            window.promptModalManager.closeModal('promptSettingsModal');
+            if (window.promptModalManager) {
+                window.promptModalManager.closeModal('promptSettingsModal');
+            }
             PromptToastManager.show('设置保存成功', 'success');
         } catch (error) {
             console.error('保存设置失败:', error);
@@ -498,18 +548,6 @@ class PromptApp {
         await this.loadData();
         this.render();
     }
-}
-
-// 初始化应用
-window.PromptToastManager = PromptToastManager;
-
-// 等待DOM加载完成后初始化
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-        window.promptApp = new PromptApp();
-    });
-} else {
-    window.promptApp = new PromptApp();
 }
 
 // 初始化应用
