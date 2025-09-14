@@ -7,8 +7,18 @@ class PromptAIService {
     }
 
     async loadSettings() {
-        const data = await chrome.storage.local.get(['promptSettings']);
-        this.settings = data.promptSettings || {
+        try {
+            const data = await chrome.storage.local.get(['promptSettings']);
+            this.settings = data.promptSettings || this.getDefaultSettings();
+        } catch (error) {
+            // 如果Chrome storage不可用（如测试环境），使用默认设置
+            console.warn('Chrome storage不可用，使用默认设置:', error);
+            this.settings = this.getDefaultSettings();
+        }
+    }
+
+    getDefaultSettings() {
+        return {
             models: [
                 {
                     id: 'gemini-2.5-flash',
@@ -27,6 +37,10 @@ class PromptAIService {
     }
 
     getModel(modelId) {
+        // 确保settings已初始化
+        if (!this.settings) {
+            this.settings = this.getDefaultSettings();
+        }
         return this.settings.models.find(model => model.id === modelId) || this.settings.models[0];
     }
 

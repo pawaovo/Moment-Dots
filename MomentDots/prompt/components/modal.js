@@ -337,6 +337,15 @@ class PromptRewriteModalManager {
             if (this.elements.rewrittenText) this.elements.rewrittenText.value = '';
             if (this.elements.copyBtn) this.elements.copyBtn.style.display = 'none';
 
+            // 确保AI服务已初始化
+            if (!window.promptAIService && window.createPromptAIService) {
+                window.createPromptAIService();
+            }
+
+            if (!window.promptAIService) {
+                throw new Error('AI服务未初始化，请刷新页面重试');
+            }
+
             // 调用AI API
             const result = await window.promptAIService.rewriteText(
                 originalText,

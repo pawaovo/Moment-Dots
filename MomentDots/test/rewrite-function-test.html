@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>改写功能专项测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .test-section {
+            border: 1px solid #ddd;
+            margin: 20px 0;
+            padding: 20px;
+            border-radius: 8px;
+        }
+        .test-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: #333;
+        }
+        .test-card {
+            border: 1px solid #eee;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 6px;
+            background: #f9f9f9;
+        }
+        .test-card h4 {
+            margin: 0 0 10px 0;
+            color: #555;
+        }
+        .test-card p {
+            margin: 5px 0;
+            color: #666;
+            font-size: 14px;
+        }
+        .test-actions {
+            margin-top: 10px;
+        }
+        .test-btn {
+            padding: 8px 16px;
+            margin: 0 5px 0 0;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .test-btn.primary {
+            background: #007cba;
+            color: white;
+        }
+        .test-btn.secondary {
+            background: #6c757d;
+            color: white;
+        }
+        .test-btn.danger {
+            background: #dc3545;
+            color: white;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        /* 弹窗样式 */
+        .prompt-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+        }
+        .prompt-modal-content {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        .prompt-modal-header {
+            padding: 20px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .prompt-modal-header h3 {
+            margin: 0;
+        }
+        .prompt-close-btn {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+        }
+        .prompt-modal-body {
+            padding: 20px;
+        }
+        .prompt-form-group {
+            margin-bottom: 15px;
+        }
+        .prompt-form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .prompt-form-group textarea {
+            width: 100%;
+            min-height: 100px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            resize: vertical;
+        }
+        .prompt-modal-footer {
+            padding: 20px;
+            border-top: 1px solid #eee;
+            text-align: right;
+        }
+        .prompt-loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+        .prompt-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <h1>提示词助手改写功能专项测试</h1>
+    
+    <div class="test-section">
+        <div class="test-title">测试状态</div>
+        <div id="testStatus" class="status info">初始化中...</div>
+    </div>
+
+    <div class="test-section">
+        <div class="test-title">模拟提示词卡片</div>
+        <div class="test-card">
+            <h4>论文大师提示词</h4>
+            <p>你是一位资深的学术写作专家，请帮我改写以下内容，使其更加学术化、严谨且符合论文写作规范。</p>
+            <p><strong>分类:</strong> 学习提升 | <strong>模型:</strong> gemini-2.5-flash</p>
+            <div class="test-actions">
+                <button class="test-btn primary" onclick="testRewriteFunction('prompt_test_1')">测试改写功能</button>
+                <button class="test-btn secondary" onclick="testModalOpen('prompt_test_1')">测试弹窗打开</button>
+            </div>
+        </div>
+        
+        <div class="test-card">
+            <h4>微信表情包提示词</h4>
+            <p>请将以下文字转换为适合微信聊天的表情包文案，要求生动有趣、朗朗上口。</p>
+            <p><strong>分类:</strong> 创意设计 | <strong>模型:</strong> gemini-2.5-flash</p>
+            <div class="test-actions">
+                <button class="test-btn primary" onclick="testRewriteFunction('prompt_test_2')">测试改写功能</button>
+                <button class="test-btn secondary" onclick="testModalOpen('prompt_test_2')">测试弹窗打开</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <div class="test-title">功能测试结果</div>
+        <div id="testResults"></div>
+    </div>
+
+    <!-- 改写弹窗HTML -->
+    <div class="prompt-modal prompt-rewrite-modal" id="promptRewriteModal" style="display: none;">
+        <div class="prompt-modal-content">
+            <div class="prompt-modal-header">
+                <h3>AI改写</h3>
+                <button class="prompt-close-btn" id="promptCloseRewriteBtn">&times;</button>
+            </div>
+            <div class="prompt-modal-body">
+                <div class="prompt-form-group">
+                    <label for="promptOriginalText">原始文案</label>
+                    <textarea id="promptOriginalText" placeholder="请输入需要改写的文案内容"></textarea>
+                </div>
+
+                <div class="prompt-form-group">
+                    <label for="promptRewrittenText">改写结果</label>
+                    <textarea id="promptRewrittenText" placeholder="AI改写结果将显示在这里" readonly></textarea>
+                </div>
+
+                <div class="prompt-loading" id="promptLoadingIndicator" style="display: none;">
+                    <span class="prompt-spinner"></span>
+                    正在改写中...
+                </div>
+            </div>
+            <div class="prompt-modal-footer">
+                <button type="button" class="test-btn secondary" id="promptCancelRewriteBtn">取消</button>
+                <button type="button" class="test-btn primary" id="promptRewriteBtn">开始改写</button>
+                <button type="button" class="test-btn" id="promptCopyResultBtn" style="display: none;">复制结果</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 测试状态更新
+        function updateStatus(message, type = 'info') {
+            const status = document.getElementById('testStatus');
+            status.textContent = message;
+            status.className = `status ${type}`;
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+
+        // 添加测试结果
+        function addTestResult(test, result, type = 'info') {
+            const results = document.getElementById('testResults');
+            const resultDiv = document.createElement('div');
+            resultDiv.className = `status ${type}`;
+            resultDiv.innerHTML = `<strong>${test}:</strong> ${result}`;
+            results.appendChild(resultDiv);
+        }
+
+        // 模拟Chrome API
+        if (typeof chrome === 'undefined') {
+            window.chrome = {
+                storage: {
+                    local: {
+                        data: {
+                            promptCategories: ['全部', '创意设计', '内容可视化', '学习提升'],
+                            promptPrompts: [
+                                {
+                                    id: 'prompt_test_1',
+                                    name: '论文大师提示词',
+                                    content: '你是一位资深的学术写作专家，请帮我改写以下内容，使其更加学术化、严谨且符合论文写作规范。要求：1. 使用专业术语 2. 逻辑清晰 3. 表达准确',
+                                    category: '学习提升',
+                                    model: 'gemini-2.5-flash'
+                                },
+                                {
+                                    id: 'prompt_test_2',
+                                    name: '微信表情包提示词',
+                                    content: '请将以下文字转换为适合微信聊天的表情包文案，要求生动有趣、朗朗上口，符合网络流行语特点。',
+                                    category: '创意设计',
+                                    model: 'gemini-2.5-flash'
+                                }
+                            ],
+                            promptSettings: {
+                                models: [{
+                                    id: 'gemini-2.5-flash',
+                                    name: 'Gemini 2.5 Flash',
+                                    apiKey: 'test-api-key',
+                                    endpoint: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent'
+                                }],
+                                defaultModel: 'gemini-2.5-flash'
+                            }
+                        },
+                        get: function(keys) {
+                            return new Promise((resolve) => {
+                                const result = {};
+                                if (Array.isArray(keys)) {
+                                    keys.forEach(key => {
+                                        if (this.data[key] !== undefined) {
+                                            result[key] = this.data[key];
+                                        }
+                                    });
+                                } else if (typeof keys === 'string') {
+                                    if (this.data[keys] !== undefined) {
+                                        result[keys] = this.data[keys];
+                                    }
+                                }
+                                setTimeout(() => resolve(result), 10);
+                            });
+                        },
+                        set: function(items) {
+                            return new Promise((resolve) => {
+                                Object.assign(this.data, items);
+                                setTimeout(() => resolve(), 10);
+                            });
+                        }
+                    }
+                }
+            };
+            updateStatus('Chrome API 模拟完成', 'success');
+        }
+
+        // 测试函数
+        function testModalOpen(promptId) {
+            try {
+                // 创建测试提示词数据
+                const testPrompts = {
+                    'prompt_test_1': {
+                        id: 'prompt_test_1',
+                        name: '论文大师提示词',
+                        content: '你是一位资深的学术写作专家，请帮我改写以下内容，使其更加学术化、严谨且符合论文写作规范。要求：1. 使用专业术语 2. 逻辑清晰 3. 表达准确',
+                        category: '学习提升',
+                        model: 'gemini-2.5-flash'
+                    },
+                    'prompt_test_2': {
+                        id: 'prompt_test_2',
+                        name: '微信表情包提示词',
+                        content: '请将以下文字转换为适合微信聊天的表情包文案，要求生动有趣、朗朗上口，符合网络流行语特点。',
+                        category: '创意设计',
+                        model: 'gemini-2.5-flash'
+                    }
+                };
+
+                const prompt = testPrompts[promptId];
+                if (!prompt) {
+                    addTestResult('弹窗测试', '提示词未找到', 'error');
+                    return;
+                }
+
+                // 直接显示弹窗
+                const modal = document.getElementById('promptRewriteModal');
+                if (modal) {
+                    modal.style.display = 'block';
+                    addTestResult('弹窗测试', `成功显示 "${prompt.name}" 的改写弹窗`, 'success');
+
+                    // 如果有modal管理器，也调用它
+                    if (window.promptRewriteModalManager) {
+                        window.promptRewriteModalManager.currentPrompt = prompt;
+                        addTestResult('弹窗测试', 'Modal管理器已设置当前提示词', 'success');
+                    }
+                } else {
+                    addTestResult('弹窗测试', '弹窗元素未找到', 'error');
+                }
+            } catch (error) {
+                addTestResult('弹窗测试', `错误: ${error.message}`, 'error');
+                console.error('弹窗测试错误:', error);
+            }
+        }
+
+        function testRewriteFunction(promptId) {
+            try {
+                // 创建测试提示词数据
+                const testPrompts = {
+                    'prompt_test_1': {
+                        id: 'prompt_test_1',
+                        name: '论文大师提示词',
+                        content: '你是一位资深的学术写作专家，请帮我改写以下内容，使其更加学术化、严谨且符合论文写作规范。要求：1. 使用专业术语 2. 逻辑清晰 3. 表达准确',
+                        category: '学习提升',
+                        model: 'gemini-2.5-flash'
+                    },
+                    'prompt_test_2': {
+                        id: 'prompt_test_2',
+                        name: '微信表情包提示词',
+                        content: '请将以下文字转换为适合微信聊天的表情包文案，要求生动有趣、朗朗上口，符合网络流行语特点。',
+                        category: '创意设计',
+                        model: 'gemini-2.5-flash'
+                    }
+                };
+
+                const prompt = testPrompts[promptId];
+                if (!prompt) {
+                    addTestResult('改写测试', '提示词未找到', 'error');
+                    return;
+                }
+
+                // 先打开弹窗
+                testModalOpen(promptId);
+
+                // 模拟填入测试文本
+                setTimeout(() => {
+                    const originalTextElement = document.getElementById('promptOriginalText');
+                    if (originalTextElement) {
+                        originalTextElement.value = '这是一个测试文本，用于验证改写功能是否正常工作。';
+                        addTestResult('文本填入', '成功填入测试文本', 'success');
+
+                        // 模拟点击改写按钮
+                        const rewriteBtn = document.getElementById('promptRewriteBtn');
+                        if (rewriteBtn) {
+                            // 手动调用改写功能
+                            if (window.promptRewriteModalManager && window.promptRewriteModalManager.handleRewrite) {
+                                window.promptRewriteModalManager.handleRewrite();
+                                addTestResult('改写按钮', '成功调用改写功能', 'success');
+                            } else {
+                                addTestResult('改写按钮', '改写功能未找到', 'error');
+                            }
+                        } else {
+                            addTestResult('改写按钮', '改写按钮未找到', 'error');
+                        }
+                    } else {
+                        addTestResult('文本填入', '原始文本输入框未找到', 'error');
+                    }
+                }, 500);
+
+            } catch (error) {
+                addTestResult('改写测试', `错误: ${error.message}`, 'error');
+                console.error('改写测试错误:', error);
+            }
+        }
+
+        // 初始化
+        updateStatus('开始加载组件...', 'info');
+        
+        // 动态加载脚本
+        const scripts = [
+            '../prompt/components/api.js',
+            '../prompt/components/modal.js'
+        ];
+        
+        let loadedCount = 0;
+        scripts.forEach((src, index) => {
+            const script = document.createElement('script');
+            script.src = src;
+            script.onload = () => {
+                loadedCount++;
+                updateStatus(`脚本 ${loadedCount}/${scripts.length} 加载完成`, 'info');
+                
+                if (loadedCount === scripts.length) {
+                    // 所有脚本加载完成，初始化组件
+                    setTimeout(() => {
+                        try {
+                            if (window.createPromptAIService) {
+                                window.createPromptAIService();
+                                addTestResult('AI服务', '成功创建AI服务实例', 'success');
+                            }
+                            
+                            if (window.createPromptModalManagers) {
+                                window.createPromptModalManagers();
+                                addTestResult('Modal管理器', '成功创建Modal管理器实例', 'success');
+                            }
+                            
+                            updateStatus('所有组件初始化完成，可以开始测试', 'success');
+                        } catch (error) {
+                            updateStatus(`初始化失败: ${error.message}`, 'error');
+                        }
+                    }, 200);
+                }
+            };
+            script.onerror = () => {
+                updateStatus(`脚本 ${src} 加载失败`, 'error');
+            };
+            document.head.appendChild(script);
+        });
+    </script>
+</body>
+</html>
