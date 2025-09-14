@@ -1,0 +1,198 @@
+{
+  "platform": {
+    "id": "douyin",
+    "name": "抖音",
+    "publishUrl": "https://creator.douyin.com/creator-micro/home",
+    "color": "bg-black"
+  },
+  "selectors": {
+    "titleInput": {
+      "primary": "input[placeholder*=\"标题\"]",
+      "fallback": [
+        ".title-input",
+        "#title",
+        "input[name=\"title\"]"
+      ]
+    },
+    "contentInput": {
+      "primary": "textarea[placeholder*=\"内容\"]",
+      "fallback": [
+        ".content-input",
+        "div[contenteditable=\"true\"]",
+        "#content"
+      ]
+    },
+    "imageUpload": {
+      "primary": "input[type=\"file\"][accept*=\"image\"]",
+      "fallback": [
+        "input[type=\"file\"]",
+        ".upload-input"
+      ]
+    },
+    "videoUpload": {
+      "primary": "input[type=\"file\"][accept*=\"video\"]",
+      "fallback": [
+        "input[type=\"file\"]",
+        ".video-upload"
+      ]
+    },
+    "imageContainer": {
+      "primary": ".image-list",
+      "fallback": [
+        ".upload-list",
+        ".media-list"
+      ]
+    },
+    "publishButton": {
+      "primary": "button:contains(\"发布\")",
+      "fallback": [
+        ".publish-btn",
+        "button[type=\"submit\"]",
+        ".submit-btn"
+      ]
+    },
+    "tagInput": {
+      "primary": "input[placeholder*=\"话题\"]",
+      "fallback": [
+        ".tag-input",
+        "#hashtags"
+      ]
+    },
+    "locationInput": {
+      "primary": "input[placeholder*=\"位置\"]",
+      "fallback": [
+        ".location-input"
+      ]
+    },
+    "privacySettings": {
+      "primary": ".privacy-select",
+      "fallback": [
+        ".visibility-select"
+      ]
+    },
+    "loginIndicators": [
+      "input[placeholder*=\"标题\"]",
+      "textarea[placeholder*=\"内容\"]",
+      ".creator-header"
+    ],
+    "errorIndicators": [
+      ".error-message",
+      ".toast-error",
+      ".upload-error",
+      ".warning-tip"
+    ],
+    "successIndicators": [
+      ".success-message",
+      ".toast-success",
+      ".publish-success"
+    ]
+  },
+  "limits": {
+    "maxTitleLength": 55,
+    "maxContentLength": 2200,
+    "maxImages": 12,
+    "maxImageSize": 20971520,
+    "allowedImageTypes": [
+      "image/jpeg",
+      "image/png",
+      "image/gif",
+      "image/webp"
+    ],
+    "allowedVideoTypes": [
+      "video/mp4",
+      "video/avi",
+      "video/mov"
+    ],
+    "maxVideoSize": 4294967296,
+    "maxTags": 20
+  },
+  "operations": {
+    "publish": {
+      "steps": [
+        {
+          "action": "checkLogin",
+          "timeout": 5000
+        },
+        {
+          "action": "waitForPageReady",
+          "timeout": 20000
+        },
+        {
+          "action": "fillTitle",
+          "target": "titleInput",
+          "timeout": 5000,
+          "required": true
+        },
+        {
+          "action": "fillContent",
+          "target": "contentInput",
+          "timeout": 10000,
+          "optional": true
+        },
+        {
+          "action": "uploadImages",
+          "target": "imageUpload",
+          "timeout": 60000,
+          "optional": true
+        },
+        {
+          "action": "addTags",
+          "target": "tagInput",
+          "timeout": 10000,
+          "optional": true
+        },
+        {
+          "action": "setPrivacy",
+          "target": "privacySettings",
+          "timeout": 5000,
+          "optional": true
+        },
+        {
+          "action": "waitForPublishReady",
+          "timeout": 10000
+        },
+        {
+          "action": "clickPublish",
+          "target": "publishButton",
+          "timeout": 5000
+        },
+        {
+          "action": "verifyResult",
+          "timeout": 20000
+        }
+      ]
+    }
+  },
+  "waitConditions": {
+    "pageLoad": {
+      "selectors": [
+        "input[placeholder*=\"标题\"]",
+        "textarea[placeholder*=\"内容\"]"
+      ],
+      "timeout": 20000
+    },
+    "imageUpload": {
+      "selectors": [".image-item", ".upload-progress"],
+      "timeout": 60000
+    },
+    "publishReady": {
+      "selectors": ["button:contains(\"发布\"):not([disabled])"],
+      "timeout": 10000
+    }
+  },
+  "retryConfig": {
+    "maxRetries": 3,
+    "retryDelay": 3000,
+    "retryableErrors": [
+      "NETWORK_ERROR",
+      "TIMEOUT_ERROR",
+      "ELEMENT_NOT_FOUND",
+      "UPLOAD_FAILED"
+    ]
+  },
+  "debugging": {
+    "enableLogs": true,
+    "screenshotOnError": true,
+    "logLevel": "info"
+  }
+}

@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>真实文章抓取测试</title>
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .test-container {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .test-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .test-button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        
+        .test-button:hover {
+            background: #0056b3;
+        }
+        
+        .test-result {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 15px;
+            margin-top: 15px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .success {
+            background: #d4edda;
+            border-color: #c3e6cb;
+            color: #155724;
+        }
+        
+        .error {
+            background: #f8d7da;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+        
+        .article-preview {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            margin-top: 15px;
+            overflow: hidden;
+        }
+        
+        .article-header {
+            background: #f8f9fa;
+            padding: 15px;
+            border-bottom: 1px solid #e9ecef;
+        }
+        
+        .article-title {
+            margin: 0 0 10px 0;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        
+        .article-meta {
+            font-size: 12px;
+            color: #6c757d;
+        }
+        
+        .article-content {
+            padding: 15px;
+            max-height: 300px;
+            overflow-y: auto;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-header">
+        <h1>🎯 真实文章抓取测试</h1>
+        <p>模拟MomentDots扩展程序在即刻文章页面的抓取过程</p>
+    </div>
+
+    <div class="test-container">
+        <h2>📄 即刻文章抓取模拟</h2>
+        <p><strong>测试URL:</strong> https://m.okjike.com/originalPosts/68bb80d614af706d82e43d01</p>
+        <p><strong>文章标题:</strong> 三个技巧，让你的产品在 Reddit 上狂刷存在感还不会被封</p>
+        
+        <button class="test-button" onclick="simulateExtraction()">模拟文章抓取</button>
+        <button class="test-button" onclick="testReadability()">测试可读性检查</button>
+        <button class="test-button" onclick="testContentEnhancement()">测试内容增强</button>
+        
+        <div id="extraction-result" class="test-result"></div>
+    </div>
+
+    <!-- 加载Mozilla Readability库 -->
+    <script src="../libs/readability/JSDOMParser.js"></script>
+    <script src="../libs/readability/Readability.js"></script>
+    <script src="../libs/readability/Readability-readerable.js"></script>
+    
+    <script>
+        // 模拟即刻文章的HTML结构
+        function createJikeArticleHTML() {
+            return `
+                <html>
+                <head>
+                    <title>三个技巧，让你的产品在 Reddit 上狂刷存在感还不会被封 - 即刻App</title>
+                    <meta name="description" content="你是否曾经想过在 Reddit 上推广自己的产品，却担心因为"自我推广"而被封号？">
+                </head>
+                <body>
+                    <div class="header">
+                        <div class="app-download">
+                            <img src="logo.png" alt="即刻App">
+                            <div>即刻App</div>
+                            <div>年轻人的同好社区</div>
+                            <div>下载</div>
+                        </div>
+                        <a href="https://web.okjike.com/originalPost/68bb80d614af706d82e43d01">在web版打开</a>
+                    </div>
+                    
+                    <main>
+                        <article>
+                            <div class="author-info">
+                                <div class="author-name">Niko_</div>
+                                <div class="publish-time">6天前</div>
+                            </div>
+                            
+                            <div class="content">
+                                <h1>三个技巧，让你的产品在 Reddit 上狂刷存在感还不会被封（含案例）</h1>
+                                
+                                <p>你是否曾经想过在 Reddit 上推广自己的产品，却担心因为"自我推广"而被封号？这确实是个需要谨慎对待的问题。</p>
+                                
+                                <p>通过深入分析大量成功案例，我总结了三种最有效且安全的推广方法，希望能为你提供一些参考。</p>
+                                
+                                <hr>
+                                
+                                <h2>【将产品融入故事叙述 📖】</h2>
+                                <p>最高明的方式，不是直接宣传产品，而是将其自然地融入你的个人经历中。这种方式能够在不触发平台自我推广警报的情况下，让用户对你的产品产生兴趣。</p>
+                                
+                                <h3>真实案例：</h3>
+                                <ul>
+                                    <li>《我辞职全身心做SaaS》（406赞/188评）</li>
+                                    <li>《十年前我融了250万刀，烧光之后我学到了这些》（652赞/109评）</li>
+                                    <li>《终于来了——今天收获第一个付费用户！》（390赞/315评）</li>
+                                </ul>
+                                
+                                <h3>可借鉴的故事角度：</h3>
+                                <ul>
+                                    <li>产品重要里程碑</li>
+                                    <li>使用自己产品解决问题的经历</li>
+                                    <li>客户的有趣使用案例</li>
+                                    <li>产品开发过程中的经验教训</li>
+                                </ul>
+                                
+                                <h3>实用技巧：</h3>
+                                <ul>
+                                    <li>✅ 保持故事为主，产品为辅</li>
+                                    <li>✅ 用吸引人的开头引发好奇心</li>
+                                    <li>✅ 适当展示你的专业背景</li>
+                                    <li>✅ 用具体数据和截图增加可信度</li>
+                                    <li>✅ 通过个人主页和评论区进行转化</li>
+                                </ul>
+                                
+                                <hr>
+                                
+                                <h2>【提供高价值专业内容 💣】</h2>
+                                <p>通过分享深度专业内容，如增长策略、SEO技巧或案例分析，你可以建立专业形象并间接推广产品。</p>
+                                
+                                <h3>真实案例：</h3>
+                                <ul>
+                                    <li>《我分析了r/SaaS 的1万条高赞贴》（84赞/46评）</li>
+                                    <li>《用这个脚本，我完成了200+自由职业单子》（1100赞/177评）</li>
+                                    <li>《5月发了5万封邮件，这是给新手的全部经验》（236赞/122评）</li>
+                                </ul>
+                                
+                                <h3>内容创作建议：</h3>
+                                <ul>
+                                    <li>强调专业资质和经验</li>
+                                    <li>提供具体可行的建议</li>
+                                    <li>内容与产品领域相关</li>
+                                    <li>选择细分领域进行深度探讨</li>
+                                </ul>
+                                
+                                <hr>
+                                
+                                <h2>【提供免费帮助与服务 🆓】</h2>
+                                <p>通过"留下你的XXX，我来帮你XXX"的形式，可以直接展示专业能力并建立用户关系。</p>
+                                
+                                <h3>真实案例：</h3>
+                                <ul>
+                                    <li>《留下你的SaaS，我来帮你在ChatGPT里排名》（157赞/401评）</li>
+                                    <li>《贴出你的SaaS，我们免费帮你找5个客户》（148赞/405评）</li>
+                                </ul>
+                                
+                                <h3>操作建议：</h3>
+                                <ul>
+                                    <li>✅ 明确说明服务内容和范围</li>
+                                    <li>✅ 设置合理的服务限额</li>
+                                    <li>✅ 引导用户在评论区互动</li>
+                                    <li>✅ 通过个人主页进行后续转化</li>
+                                </ul>
+                                
+                                <hr>
+                                
+                                <h2>【推广策略与风险管理 🤔】</h2>
+                                
+                                <h3>严格版块推广技巧：</h3>
+                                <ul>
+                                    <li>自然融入产品名称，避免销售语气</li>
+                                    <li>优先在评论区分享链接</li>
+                                    <li>等待用户主动询问产品信息</li>
+                                </ul>
+                                
+                                <h3>超严格版块应对策略：</h3>
+                                <ul>
+                                    <li>暗示所在领域和解决的问题</li>
+                                    <li>通过个人主页进行引流</li>
+                                    <li>在适当时机分享产品信息</li>
+                                </ul>
+                                
+                                <hr>
+                                
+                                <h2>【个人主页优化建议 🧑💻】</h2>
+                                <ul>
+                                    <li>使用真实姓名和头像</li>
+                                    <li>编写清晰的专业简介</li>
+                                    <li>设置有效的引流链接</li>
+                                    <li>完善社交媒体联系方式</li>
+                                </ul>
+                                
+                                <hr>
+                                
+                                <p>在 Reddit 上进行有效推广的关键在于：优先提供价值，自然融入产品信息。这种方法可能需要更多时间，但长期效果更为稳定和可持续。</p>
+                                
+                                <p>欢迎在评论区分享你的 Reddit 推广经验和心得，我们一起交流学习。</p>
+                            </div>
+                            
+                            <div class="interaction">
+                                <div class="like">7</div>
+                                <div class="comment">0</div>
+                                <div class="share">11</div>
+                            </div>
+                        </article>
+                    </main>
+                    
+                    <aside>
+                        <div class="topic-info">
+                            <h2>来自圈子</h2>
+                            <div class="topic">
+                                <img src="topic.jpg" alt="运营的日常">
+                                <div>
+                                    <h3>运营的日常</h3>
+                                    <p>115624人已经加入</p>
+                                </div>
+                                <button>加入</button>
+                            </div>
+                        </div>
+                    </aside>
+                    
+                    <footer>
+                        <div class="app-promotion">下载即刻App</div>
+                    </footer>
+                </body>
+                </html>
+            `;
+        }
+
+        // 工具函数
+        function logResult(elementId, message, type = 'info') {
+            const element = document.getElementById(elementId);
+            const timestamp = new Date().toLocaleTimeString();
+            const statusIcon = type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️';
+            element.innerHTML += `[${timestamp}] ${statusIcon} ${message}\n`;
+            element.scrollTop = element.scrollHeight;
+        }
+
+        function updateStatus(elementId, message, type = 'info') {
+            const element = document.getElementById(elementId);
+            element.className = `test-result ${type}`;
+            element.textContent = message;
+        }
+
+        // 模拟文章抓取
+        function simulateExtraction() {
+            updateStatus('extraction-result', '开始模拟即刻文章抓取...', 'loading');
+
+            try {
+                const htmlContent = createJikeArticleHTML();
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(htmlContent, 'text/html');
+
+                logResult('extraction-result', '✅ HTML解析成功', 'success');
+                logResult('extraction-result', `页面标题: ${doc.title}`, 'info');
+
+                // 检查是否适合抓取
+                const isReaderable = isProbablyReaderable(doc);
+                logResult('extraction-result', `可读性检查: ${isReaderable ? '通过' : '失败'}`, isReaderable ? 'success' : 'error');
+
+                if (!isReaderable) {
+                    logResult('extraction-result', '页面内容不适合抓取', 'error');
+                    return;
+                }
+
+                // 执行抓取
+                const reader = new Readability(doc.cloneNode(true), {
+                    charThreshold: 200,
+                    classesToPreserve: ['highlight', 'code', 'emoji'],
+                    keepClasses: true,
+                    debug: false
+                });
+
+                const article = reader.parse();
+
+                if (article) {
+                    logResult('extraction-result', '✅ 文章抓取成功!', 'success');
+                    logResult('extraction-result', `标题: ${article.title}`, 'success');
+                    logResult('extraction-result', `作者: ${article.byline || '未检测到'}`, 'info');
+                    logResult('extraction-result', `内容长度: ${article.length} 字符`, 'info');
+                    logResult('extraction-result', `语言: ${article.lang || '未检测到'}`, 'info');
+
+                    // 显示内容预览
+                    const preview = article.textContent.substring(0, 200);
+                    logResult('extraction-result', `内容预览: ${preview}...`, 'info');
+
+                    // 显示完整的文章预览
+                    displayArticlePreview(article);
+
+                    // 模拟内容增强
+                    const enhancedData = simulateContentEnhancement(article);
+                    logResult('extraction-result', `✅ 内容增强完成`, 'success');
+                    logResult('extraction-result', `检测到图片: ${enhancedData.images.length} 张`, 'info');
+                    logResult('extraction-result', `检测到链接: ${enhancedData.links.length} 个`, 'info');
+                    logResult('extraction-result', `预估阅读时间: ${enhancedData.readingTime} 分钟`, 'info');
+                    logResult('extraction-result', `检测到平台: ${enhancedData.platform}`, 'info');
+
+                } else {
+                    logResult('extraction-result', '❌ 抓取失败: 无法解析内容', 'error');
+                }
+
+            } catch (error) {
+                logResult('extraction-result', `❌ 抓取错误: ${error.message}`, 'error');
+                console.error('Extraction error:', error);
+            }
+        }
+
+        // 测试可读性检查
+        function testReadability() {
+            updateStatus('extraction-result', '测试可读性检查...', 'loading');
+
+            const htmlContent = createJikeArticleHTML();
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(htmlContent, 'text/html');
+
+            // 测试不同的内容
+            const tests = [
+                { name: '完整即刻文章', doc: doc },
+                { name: '只有标题的页面', doc: createMinimalHTML() },
+                { name: '广告页面', doc: createAdHTML() }
+            ];
+
+            tests.forEach(test => {
+                const isReaderable = isProbablyReaderable(test.doc);
+                logResult('extraction-result', `${test.name}: ${isReaderable ? '✅ 可读' : '❌ 不可读'}`, isReaderable ? 'success' : 'error');
+            });
+        }
+
+        // 测试内容增强
+        function testContentEnhancement() {
+            updateStatus('extraction-result', '测试内容增强功能...', 'loading');
+
+            const htmlContent = createJikeArticleHTML();
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(htmlContent, 'text/html');
+
+            const reader = new Readability(doc.cloneNode(true));
+            const article = reader.parse();
+
+            if (article) {
+                const enhanced = simulateContentEnhancement(article);
+
+                logResult('extraction-result', '✅ 内容增强测试完成', 'success');
+                logResult('extraction-result', `原始内容长度: ${article.length}`, 'info');
+                logResult('extraction-result', `增强后数据:`, 'info');
+                logResult('extraction-result', `  - 平台: ${enhanced.platform}`, 'info');
+                logResult('extraction-result', `  - 阅读时间: ${enhanced.readingTime}分钟`, 'info');
+                logResult('extraction-result', `  - 摘要: ${enhanced.excerpt.substring(0, 50)}...`, 'info');
+                logResult('extraction-result', `  - 图片数量: ${enhanced.images.length}`, 'info');
+                logResult('extraction-result', `  - 链接数量: ${enhanced.links.length}`, 'info');
+            }
+        }
+
+        // 模拟内容增强处理
+        function simulateContentEnhancement(article) {
+            // 计算阅读时间（基于中文阅读速度300字/分钟）
+            const readingTime = Math.ceil(article.length / 300);
+
+            // 检测平台
+            const platform = '即刻';
+
+            // 生成摘要
+            const excerpt = article.textContent.substring(0, 200) + '...';
+
+            // 模拟提取的图片和链接
+            const images = [
+                { src: 'logo.png', alt: '即刻App' },
+                { src: 'topic.jpg', alt: '运营的日常' }
+            ];
+
+            const links = [
+                { url: 'https://web.okjike.com/originalPost/68bb80d614af706d82e43d01', text: '在web版打开' },
+                { url: 'https://www.reddit.com/r/SaaS/comments/1hn9d64/', text: 'Reddit案例1' },
+                { url: 'https://www.reddit.com/r/SaaS/comments/1ljtkzt/', text: 'Reddit案例2' }
+            ];
+
+            return {
+                ...article,
+                platform,
+                readingTime,
+                excerpt,
+                images,
+                links,
+                timestamp: new Date().toISOString(),
+                extractionMethod: 'mozilla-readability-enhanced'
+            };
+        }
+
+        // 显示文章预览
+        function displayArticlePreview(article) {
+            const container = document.getElementById('extraction-result');
+            const previewDiv = document.createElement('div');
+            previewDiv.className = 'article-preview';
+            previewDiv.innerHTML = `
+                <div class="article-header">
+                    <div class="article-title">${article.title || '无标题'}</div>
+                    <div class="article-meta">
+                        作者: ${article.byline || 'Niko_'} |
+                        长度: ${article.length} 字符 |
+                        语言: ${article.lang || 'zh-CN'}
+                    </div>
+                </div>
+                <div class="article-content">
+                    ${article.content.substring(0, 1000)}${article.content.length > 1000 ? '...' : ''}
+                </div>
+            `;
+            container.appendChild(previewDiv);
+        }
+
+        // 创建最小HTML用于测试
+        function createMinimalHTML() {
+            const html = '<html><head><title>测试</title></head><body><h1>只有标题</h1></body></html>';
+            return new DOMParser().parseFromString(html, 'text/html');
+        }
+
+        // 创建广告页面用于测试
+        function createAdHTML() {
+            const html = `
+                <html>
+                <head><title>广告页面</title></head>
+                <body>
+                    <div class="ad">广告1</div>
+                    <div class="ad">广告2</div>
+                    <div class="nav">导航</div>
+                    <div class="footer">页脚</div>
+                </body>
+                </html>
+            `;
+            return new DOMParser().parseFromString(html, 'text/html');
+        }
+
+        // 页面加载时的提示
+        window.addEventListener('load', function() {
+            logResult('extraction-result', '🎯 真实文章抓取测试已准备就绪', 'success');
+            logResult('extraction-result', '点击"模拟文章抓取"开始测试', 'info');
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>发布状态监控</title>
+  <link href="../styles/output.css" rel="stylesheet">
+  <style>
+    body {
+      width: 320px;
+      height: 100vh;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+    }
+    
+    .sidepanel-container {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .status-list {
+      flex: 1;
+      overflow-y: auto;
+    }
+    
+    /* 自定义滚动条 */
+    .status-list::-webkit-scrollbar {
+      width: 4px;
+    }
+    
+    .status-list::-webkit-scrollbar-track {
+      background: #f1f1f1;
+    }
+    
+    .status-list::-webkit-scrollbar-thumb {
+      background: #c1c1c1;
+      border-radius: 2px;
+    }
+    
+    .status-list::-webkit-scrollbar-thumb:hover {
+      background: #a8a8a8;
+    }
+    
+    /* 状态指示器动画 */
+    .status-publishing {
+      animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% {
+        opacity: 1;
+      }
+      50% {
+        opacity: .5;
+      }
+    }
+
+    /* 平台图标样式 */
+    .platform-logo {
+      object-fit: contain;
+      background-color: #f9fafb;
+      border: 1px solid #e5e7eb;
+      transition: all 0.2s ease;
+    }
+
+    .platform-logo:hover {
+      border-color: #d1d5db;
+    }
+
+    /* logo加载失败时的备用样式 */
+    .platform-logo-fallback {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: bold;
+      color: white;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    }
+  </style>
+</head>
+<body>
+  <div id="sidepanel-root" class="sidepanel-container bg-gray-50">
+    <!-- 加载中... -->
+    <div class="flex items-center justify-center h-full">
+      <p class="text-gray-500">加载中...</p>
+    </div>
+  </div>
+  
+  <!-- 应用脚本 -->
+  <script src="../shared/config/platforms.js"></script>
+  <script src="../shared/utils/storage.js"></script>
+  <script src="../shared/services/LogoCacheManager.js"></script>
+  <script src="sidepanel.js"></script>
+</body>
+</html>

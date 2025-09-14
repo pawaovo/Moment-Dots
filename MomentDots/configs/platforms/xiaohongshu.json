@@ -1,0 +1,173 @@
+{
+  "platform": {
+    "id": "xiaohongshu",
+    "name": "小红书",
+    "publishUrl": "https://creator.xiaohongshu.com/new/home",
+    "color": "bg-red-500"
+  },
+  "selectors": {
+    "titleInput": {
+      "primary": "input[placeholder=\"填写标题会有更多赞哦～\"]",
+      "fallback": [
+        "input[placeholder*=\"标题\"]",
+        ".title-input",
+        "#title"
+      ]
+    },
+    "contentInput": {
+      "primary": "div[contenteditable=\"true\"]",
+      "fallback": [
+        ".content-editor",
+        ".note-editor",
+        "textarea[placeholder*=\"内容\"]"
+      ]
+    },
+    "imageUpload": {
+      "primary": "input[type=\"file\"][accept*=\"image\"]",
+      "fallback": [
+        "input[type=\"file\"]",
+        ".upload-btn input"
+      ]
+    },
+    "imageContainer": {
+      "primary": ".image-list",
+      "fallback": [
+        ".upload-list",
+        ".pic-list"
+      ]
+    },
+    "publishButton": {
+      "primary": "button:contains(\"发布\")",
+      "fallback": [
+        ".publish-btn",
+        "button[type=\"submit\"]"
+      ]
+    },
+    "tagInput": {
+      "primary": "input[placeholder*=\"标签\"]",
+      "fallback": [
+        ".tag-input",
+        "#tags"
+      ]
+    },
+    "locationInput": {
+      "primary": "input[placeholder*=\"地点\"]",
+      "fallback": [
+        ".location-input"
+      ]
+    },
+    "loginIndicators": [
+      "input[placeholder=\"填写标题会有更多赞哦～\"]",
+      "div[contenteditable=\"true\"]",
+      ".creator-header"
+    ],
+    "errorIndicators": [
+      ".error-message",
+      ".toast-error",
+      ".message-error",
+      ".warning-tip"
+    ],
+    "successIndicators": [
+      ".success-message",
+      ".toast-success",
+      ".publish-success"
+    ]
+  },
+  "limits": {
+    "maxTitleLength": 20,
+    "maxContentLength": 1000,
+    "maxImages": 18,
+    "minImages": 1,
+    "maxImageSize": 10485760,
+    "allowedImageTypes": [
+      "image/jpeg",
+      "image/png",
+      "image/gif",
+      "image/webp"
+    ],
+    "maxTags": 10
+  },
+  "operations": {
+    "publish": {
+      "steps": [
+        {
+          "action": "checkLogin",
+          "timeout": 5000
+        },
+        {
+          "action": "waitForPageReady",
+          "timeout": 15000
+        },
+        {
+          "action": "fillTitle",
+          "target": "titleInput",
+          "timeout": 5000,
+          "required": true
+        },
+        {
+          "action": "fillContent",
+          "target": "contentInput",
+          "timeout": 10000,
+          "required": true
+        },
+        {
+          "action": "uploadImages",
+          "target": "imageUpload",
+          "timeout": 60000,
+          "required": true
+        },
+        {
+          "action": "addTags",
+          "target": "tagInput",
+          "timeout": 10000,
+          "optional": true
+        },
+        {
+          "action": "waitForPublishReady",
+          "timeout": 10000
+        },
+        {
+          "action": "clickPublish",
+          "target": "publishButton",
+          "timeout": 5000
+        },
+        {
+          "action": "verifyResult",
+          "timeout": 15000
+        }
+      ]
+    }
+  },
+  "waitConditions": {
+    "pageLoad": {
+      "selectors": [
+        "input[placeholder=\"填写标题会有更多赞哦～\"]",
+        "div[contenteditable=\"true\"]"
+      ],
+      "timeout": 8000
+    },
+    "imageUpload": {
+      "selectors": [".image-item", ".upload-progress"],
+      "timeout": 30000
+    },
+    "publishReady": {
+      "selectors": ["button:contains(\"发布\"):not([disabled])"],
+      "timeout": 5000
+    }
+  },
+  "retryConfig": {
+    "maxRetries": 3,
+    "retryDelay": 3000,
+    "retryableErrors": [
+      "NETWORK_ERROR",
+      "TIMEOUT_ERROR",
+      "ELEMENT_NOT_FOUND",
+      "IMAGE_UPLOAD_FAILED"
+    ]
+  },
+  "debugging": {
+    "enableLogs": true,
+    "screenshotOnError": true,
+    "logLevel": "info"
+  }
+}

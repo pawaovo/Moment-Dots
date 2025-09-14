@@ -1,0 +1,191 @@
+{
+  "manifest_version": 3,
+  "name": "动态发布助手",
+  "version": "1.0.0",
+  "description": "一键发布动态到微博、小红书、即刻、抖音等多个平台",
+  "author": "MomentDots Team",
+
+  "permissions": [
+    "storage",
+    "scripting",
+    "sidePanel",
+    "tabs",
+    "activeTab",
+    "windows",
+    "clipboardWrite",
+    "clipboardRead"
+  ],
+
+  "host_permissions": [
+    "https://weibo.com/*",
+    "https://card.weibo.com/*",
+    "https://www.xiaohongshu.com/*",
+    "https://web.okjike.com/*",
+    "https://creator.douyin.com/*",
+    "https://m.weibo.cn/*",
+    "https://creator.xiaohongshu.com/*",
+    "https://t.bilibili.com/*",
+    "https://member.bilibili.com/*",
+    "https://mp.weixin.qq.com/*",
+    "https://channels.weixin.qq.com/*",
+    "https://favicon.im/*",
+    "https://zhihu.com/*",
+    "https://www.zhihu.com/*",
+    "https://juejin.cn/*",
+    "https://blog.csdn.net/*",
+    "https://www.jianshu.com/*",
+    "https://segmentfault.com/*",
+    "<all_urls>"
+  ],
+
+  "background": {
+    "service_worker": "background/background.js"
+  },
+
+  "action": {
+    "default_title": "动态发布助手",
+    "default_icon": {
+      "16": "assets/icon16.png",
+      "32": "assets/icon32.png",
+      "48": "assets/icon48.png",
+      "128": "assets/icon128.png"
+    }
+  },
+
+  "side_panel": {
+    "default_path": "sidepanel/sidepanel.html"
+  },
+
+  "icons": {
+    "16": "assets/icon16.png",
+    "32": "assets/icon32.png",
+    "48": "assets/icon48.png",
+    "128": "assets/icon128.png"
+  },
+
+  "content_scripts": [
+    {
+      "matches": ["https://weibo.com/*", "https://m.weibo.cn/*", "https://card.weibo.com/*"],
+      "js": [
+        "content-scripts/shared/UniversalContentInjector.js",
+        "content-scripts/shared/PlatformAdapter.js",
+        "content-scripts/shared/AdapterInitializer.js",
+        "content-scripts/adapters/common/BaseConfigManager.js",
+        "content-scripts/adapters/common/MutationObserverBase.js",
+        "content-scripts/adapters/common/BaseClassLoader.js",
+        "content-scripts/shared/FileProcessorBase.js",
+        "content-scripts/shared/PlatformConfigBase.js",
+        "content-scripts/adapters/weibo.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://www.xiaohongshu.com/*", "https://creator.xiaohongshu.com/*"],
+      "js": [
+        "content-scripts/shared/UniversalContentInjector.js",
+        "content-scripts/shared/PlatformAdapter.js",
+        "content-scripts/shared/AdapterInitializer.js",
+        "content-scripts/adapters/common/BaseConfigManager.js",
+        "content-scripts/adapters/common/MutationObserverBase.js",
+        "content-scripts/adapters/common/BaseClassLoader.js",
+        "content-scripts/shared/FileProcessorBase.js",
+        "content-scripts/shared/PlatformConfigBase.js",
+        "content-scripts/adapters/xiaohongshu.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://web.okjike.com/*"],
+      "js": [
+        "content-scripts/shared/UniversalContentInjector.js",
+        "content-scripts/shared/PlatformAdapter.js",
+        "content-scripts/shared/AdapterInitializer.js",
+        "content-scripts/adapters/common/BaseConfigManager.js",
+        "content-scripts/adapters/common/MutationObserverBase.js",
+        "content-scripts/adapters/common/BaseClassLoader.js",
+        "content-scripts/shared/FileProcessorBase.js",
+        "content-scripts/shared/PlatformConfigBase.js",
+        "content-scripts/adapters/jike.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://creator.douyin.com/*"],
+      "js": [
+        "content-scripts/shared/UniversalContentInjector.js",
+        "content-scripts/shared/PlatformAdapter.js",
+        "content-scripts/shared/AdapterInitializer.js",
+        "content-scripts/adapters/common/BaseConfigManager.js",
+        "content-scripts/adapters/common/MutationObserverBase.js",
+        "content-scripts/adapters/common/BaseClassLoader.js",
+        "content-scripts/shared/FileProcessorBase.js",
+        "content-scripts/shared/PlatformConfigBase.js",
+        "content-scripts/adapters/douyin.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://x.com/*"],
+      "js": [
+        "content-scripts/shared/UniversalContentInjector.js",
+        "content-scripts/shared/PlatformAdapter.js",
+        "content-scripts/shared/AdapterInitializer.js",
+        "content-scripts/adapters/common/BaseConfigManager.js",
+        "content-scripts/adapters/common/MutationObserverBase.js",
+        "content-scripts/adapters/common/BaseClassLoader.js",
+        "content-scripts/shared/FileProcessorBase.js",
+        "content-scripts/shared/PlatformConfigBase.js",
+        "content-scripts/adapters/x.js"
+      ],
+      "run_at": "document_idle"
+    }
+,
+    {
+      "matches": ["https://t.bilibili.com/*", "https://member.bilibili.com/*"],
+      "js": [
+        "content-scripts/shared/UniversalContentInjector.js",
+        "content-scripts/shared/PlatformAdapter.js",
+        "content-scripts/shared/AdapterInitializer.js",
+        "content-scripts/adapters/common/BaseConfigManager.js",
+        "content-scripts/adapters/common/MutationObserverBase.js",
+        "content-scripts/adapters/common/BaseClassLoader.js",
+        "content-scripts/shared/FileProcessorBase.js",
+        "content-scripts/shared/PlatformConfigBase.js",
+        "content-scripts/adapters/bilibili.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://channels.weixin.qq.com/*"],
+      "js": [
+        "content-scripts/shared/UniversalContentInjector.js",
+        "content-scripts/shared/PlatformAdapter.js",
+        "content-scripts/shared/AdapterInitializer.js",
+        "content-scripts/adapters/common/BaseConfigManager.js",
+        "content-scripts/adapters/common/MutationObserverBase.js",
+        "content-scripts/adapters/common/BaseClassLoader.js",
+        "content-scripts/shared/FileProcessorBase.js",
+        "content-scripts/shared/PlatformConfigBase.js",
+        "content-scripts/adapters/weixinchannels.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "assets/*",
+        "styles/*",
+        "main/*",
+        "shared/*",
+        "test/*",
+        "libs/readability/Readability.js",
+        "libs/readability/Readability-readerable.js",
+        "libs/readability/JSDOMParser.js",
+        "shared/services/ArticleExtractorService.js"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

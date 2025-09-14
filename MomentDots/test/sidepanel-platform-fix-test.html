@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>侧边栏平台显示修复测试</title>
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .test-container {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .test-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .test-section {
+            margin-bottom: 30px;
+            padding: 15px;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+        }
+        
+        .test-button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        
+        .test-button:hover {
+            background: #0056b3;
+        }
+        
+        .test-result {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            margin-top: 10px;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+        
+        .success {
+            background: #d4edda;
+            border-color: #c3e6cb;
+            color: #155724;
+        }
+        
+        .error {
+            background: #f8d7da;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+        
+        .platform-item {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin: 5px 0;
+            background: white;
+        }
+        
+        .platform-logo {
+            width: 24px;
+            height: 24px;
+            margin-right: 10px;
+            border-radius: 4px;
+        }
+        
+        .platform-name {
+            font-weight: 500;
+        }
+        
+        .platform-id {
+            color: #666;
+            font-size: 12px;
+            margin-left: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-header">
+        <h1>侧边栏平台显示修复测试</h1>
+        <p>测试 getPlatformById 函数是否能正确获取文章专用平台信息</p>
+    </div>
+
+    <div class="test-container">
+        <div class="test-section">
+            <h3>1. 平台配置加载测试</h3>
+            <p>测试是否能正确加载平台配置文件：</p>
+            <button class="test-button" onclick="testPlatformConfigLoading()">测试平台配置加载</button>
+            <div id="config-loading-result" class="test-result" style="display: none;"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>2. 文章平台查找测试</h3>
+            <p>测试 getPlatformById 函数是否能正确查找文章专用平台：</p>
+            <button class="test-button" onclick="testArticlePlatformLookup()">测试文章平台查找</button>
+            <div id="platform-lookup-result" class="test-result" style="display: none;"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>3. 侧边栏状态项生成测试</h3>
+            <p>模拟侧边栏中的状态项生成：</p>
+            <button class="test-button" onclick="testStatusItemGeneration()">测试状态项生成</button>
+            <div id="status-item-result" class="test-result" style="display: none;"></div>
+            <div id="status-item-preview" style="margin-top: 10px;"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>4. 平台显示对比测试</h3>
+            <p>对比修复前后的平台显示效果：</p>
+            <button class="test-button" onclick="testPlatformDisplayComparison()">测试平台显示对比</button>
+            <div id="display-comparison-result" class="test-result" style="display: none;"></div>
+        </div>
+    </div>
+
+    <!-- 引入平台配置文件 -->
+    <script src="../shared/config/platforms.js"></script>
+    
+    <script>
+        // 测试平台配置加载
+        function testPlatformConfigLoading() {
+            const resultDiv = document.getElementById('config-loading-result');
+            resultDiv.style.display = 'block';
+            
+            try {
+                let result = '✅ 平台配置加载测试结果:\n\n';
+                
+                // 检查 SUPPORTED_PLATFORMS
+                if (typeof SUPPORTED_PLATFORMS !== 'undefined' && Array.isArray(SUPPORTED_PLATFORMS)) {
+                    result += `常规平台数量: ${SUPPORTED_PLATFORMS.length}\n`;
+                    result += `常规平台列表: ${SUPPORTED_PLATFORMS.map(p => p.name).join(', ')}\n\n`;
+                } else {
+                    result += '❌ SUPPORTED_PLATFORMS 未正确加载\n\n';
+                }
+                
+                // 检查 ARTICLE_PLATFORMS
+                if (typeof ARTICLE_PLATFORMS !== 'undefined' && Array.isArray(ARTICLE_PLATFORMS)) {
+                    result += `文章平台数量: ${ARTICLE_PLATFORMS.length}\n`;
+                    result += `文章平台列表: ${ARTICLE_PLATFORMS.map(p => p.name).join(', ')}\n\n`;
+                } else {
+                    result += '❌ ARTICLE_PLATFORMS 未正确加载\n\n';
+                }
+                
+                // 检查函数
+                const functions = ['getPlatformById', 'getArticlePlatforms', 'isValidPlatformId'];
+                functions.forEach(funcName => {
+                    if (typeof window[funcName] === 'function') {
+                        result += `✅ ${funcName} 函数已加载\n`;
+                    } else {
+                        result += `❌ ${funcName} 函数未加载\n`;
+                    }
+                });
+                
+                resultDiv.className = 'test-result success';
+                resultDiv.textContent = result;
+                
+            } catch (error) {
+                resultDiv.className = 'test-result error';
+                resultDiv.textContent = '❌ 平台配置加载测试失败\n' + error.message;
+            }
+        }
+        
+        // 测试文章平台查找
+        function testArticlePlatformLookup() {
+            const resultDiv = document.getElementById('platform-lookup-result');
+            resultDiv.style.display = 'block';
+            
+            try {
+                let result = '✅ 文章平台查找测试结果:\n\n';
+                
+                // 测试文章平台ID
+                const articlePlatformIds = ['weibo-article', 'bilibili-article', 'weixin-article'];
+                
+                articlePlatformIds.forEach(platformId => {
+                    const platform = getPlatformById(platformId);
+                    if (platform) {
+                        result += `✅ ${platformId}:\n`;
+                        result += `  名称: ${platform.name}\n`;
+                        result += `  URL: ${platform.publishUrl}\n`;
+                        result += `  内容类型: ${platform.contentType || '未指定'}\n\n`;
+                    } else {
+                        result += `❌ ${platformId}: 未找到平台信息\n\n`;
+                    }
+                });
+                
+                // 测试常规平台ID（确保不受影响）
+                const regularPlatformIds = ['weibo', 'xiaohongshu', 'bilibili'];
+                result += '--- 常规平台测试（确保不受影响） ---\n';
+                
+                regularPlatformIds.forEach(platformId => {
+                    const platform = getPlatformById(platformId);
+                    if (platform) {
+                        result += `✅ ${platformId}: ${platform.name}\n`;
+                    } else {
+                        result += `❌ ${platformId}: 未找到平台信息\n`;
+                    }
+                });
+                
+                resultDiv.className = 'test-result success';
+                resultDiv.textContent = result;
+                
+            } catch (error) {
+                resultDiv.className = 'test-result error';
+                resultDiv.textContent = '❌ 文章平台查找测试失败\n' + error.message;
+            }
+        }
+        
+        // 测试状态项生成
+        function testStatusItemGeneration() {
+            const resultDiv = document.getElementById('status-item-result');
+            const previewDiv = document.getElementById('status-item-preview');
+            resultDiv.style.display = 'block';
+            
+            try {
+                let result = '✅ 状态项生成测试结果:\n\n';
+                
+                // 模拟发布结果数据
+                const mockPublishResults = [
+                    { platform: 'weibo-article', status: 'success' },
+                    { platform: 'bilibili-article', status: 'publishing' },
+                    { platform: 'weixin-article', status: 'failed' }
+                ];
+                
+                let previewHTML = '<h4>侧边栏状态项预览：</h4>';
+                
+                mockPublishResults.forEach(mockResult => {
+                    const platform = getPlatformById(mockResult.platform);
+                    if (platform) {
+                        result += `✅ ${mockResult.platform}:\n`;
+                        result += `  显示名称: ${platform.name}\n`;
+                        result += `  Logo URL: ${platform.logoUrl}\n`;
+                        result += `  状态: ${mockResult.status}\n\n`;
+                        
+                        // 生成预览HTML
+                        previewHTML += `
+                            <div class="platform-item">
+                                <img src="${platform.logoUrl}" alt="${platform.name}" class="platform-logo" 
+                                     onerror="this.style.display='none'">
+                                <span class="platform-name">${platform.name}</span>
+                                <span class="platform-id">${platform.id}</span>
+                            </div>
+                        `;
+                    } else {
+                        result += `❌ ${mockResult.platform}: 平台信息获取失败\n\n`;
+                        
+                        previewHTML += `
+                            <div class="platform-item">
+                                <div class="platform-logo" style="background: #ccc;"></div>
+                                <span class="platform-name">${mockResult.platform}</span>
+                                <span class="platform-id">未找到</span>
+                            </div>
+                        `;
+                    }
+                });
+                
+                previewDiv.innerHTML = previewHTML;
+                resultDiv.className = 'test-result success';
+                resultDiv.textContent = result;
+                
+            } catch (error) {
+                resultDiv.className = 'test-result error';
+                resultDiv.textContent = '❌ 状态项生成测试失败\n' + error.message;
+            }
+        }
+        
+        // 测试平台显示对比
+        function testPlatformDisplayComparison() {
+            const resultDiv = document.getElementById('display-comparison-result');
+            resultDiv.style.display = 'block';
+            
+            try {
+                let result = '✅ 平台显示对比测试结果:\n\n';
+                
+                // 模拟修复前的行为（只查找 SUPPORTED_PLATFORMS）
+                function getPlatformByIdOld(id) {
+                    return SUPPORTED_PLATFORMS.find(platform => platform.id === id);
+                }
+                
+                const testPlatformIds = ['weibo-article', 'bilibili-article', 'weixin-article'];
+                
+                result += '--- 修复前后对比 ---\n';
+                testPlatformIds.forEach(platformId => {
+                    const oldResult = getPlatformByIdOld(platformId);
+                    const newResult = getPlatformById(platformId);
+                    
+                    result += `\n平台ID: ${platformId}\n`;
+                    result += `修复前: ${oldResult ? oldResult.name : '未找到'}\n`;
+                    result += `修复后: ${newResult ? newResult.name : '未找到'}\n`;
+                    
+                    if (!oldResult && newResult) {
+                        result += `✅ 修复成功！现在能正确显示: ${newResult.name}\n`;
+                    } else if (oldResult && newResult && oldResult.name !== newResult.name) {
+                        result += `✅ 修复成功！名称从 "${oldResult.name}" 更正为 "${newResult.name}"\n`;
+                    } else if (!newResult) {
+                        result += `❌ 仍然无法找到平台信息\n`;
+                    }
+                });
+                
+                resultDiv.className = 'test-result success';
+                resultDiv.textContent = result;
+                
+            } catch (error) {
+                resultDiv.className = 'test-result error';
+                resultDiv.textContent = '❌ 平台显示对比测试失败\n' + error.message;
+            }
+        }
+        
+        // 页面加载时的初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('侧边栏平台显示修复测试页面已加载');
+            
+            // 自动运行配置加载测试
+            setTimeout(() => {
+                testPlatformConfigLoading();
+            }, 500);
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>动态发布助手</title>
+  <link href="../styles/output.css" rel="stylesheet">
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+      background-color: #f9fafb;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    }
+    
+    .main-container {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .content-area {
+      flex: 1;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 2rem;
+      width: 100%;
+    }
+    
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 400px;
+      gap: 2rem;
+      min-height: 600px;
+      overflow: hidden;
+      max-width: 100%;
+    }
+
+    .form-grid > * {
+      min-width: 0;
+      overflow: hidden;
+    }
+    
+    @media (max-width: 1024px) {
+      .form-grid {
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+      }
+      
+      .content-area {
+        padding: 1rem;
+      }
+    }
+    
+    /* 自定义滚动条 */
+    ::-webkit-scrollbar {
+      width: 8px;
+    }
+    
+    ::-webkit-scrollbar-track {
+      background: #f1f1f1;
+    }
+    
+    ::-webkit-scrollbar-thumb {
+      background: #c1c1c1;
+      border-radius: 4px;
+    }
+    
+    ::-webkit-scrollbar-thumb:hover {
+      background: #a8a8a8;
+    }
+    
+    /* 加载动画 */
+    .loading-spinner {
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    /* 按钮点击反馈效果 */
+    .button-clicked {
+      transform: scale(0.98);
+      background-color: #1d4ed8 !important;
+      transition: all 0.1s ease-in-out;
+    }
+
+    .button-clicked:hover {
+      background-color: #1d4ed8 !important;
+    }
+
+    /* 平台logo样式 */
+    .platform-logo {
+      object-fit: contain;
+      background-color: #f9fafb;
+      border: 1px solid #e5e7eb;
+      transition: all 0.2s ease;
+    }
+
+    .platform-logo:hover {
+      border-color: #d1d5db;
+    }
+
+    /* logo加载失败时的备用样式 */
+    .platform-logo-fallback {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: bold;
+      color: white;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    }
+
+    /* 文章预览样式 */
+    .article-preview {
+      background: white;
+      border-radius: 12px;
+      padding: 1.5rem;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+      margin-top: 1rem;
+      max-width: 100%;
+      overflow: hidden;
+      word-wrap: break-word;
+    }
+
+    .article-header {
+      border-bottom: 1px solid #e5e7eb;
+      padding-bottom: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .article-title {
+      color: #1f2937;
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin: 0 0 0.5rem 0;
+      line-height: 1.4;
+    }
+
+    .article-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      font-size: 0.875rem;
+      color: #6b7280;
+    }
+
+    .meta-item {
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+    }
+
+    .article-excerpt {
+      background: #f8fafc;
+      border-left: 4px solid #3b82f6;
+      padding: 1rem;
+      margin: 1rem 0;
+      border-radius: 0 8px 8px 0;
+    }
+
+    .article-excerpt h4 {
+      margin: 0 0 0.5rem 0;
+      color: #1f2937;
+      font-size: 1rem;
+      font-weight: 600;
+    }
+
+    .article-excerpt p {
+      margin: 0;
+      color: #4b5563;
+      line-height: 1.6;
+    }
+
+    .content-stats {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      margin: 1rem 0;
+      padding: 0.75rem;
+      background: #f9fafb;
+      border-radius: 8px;
+      font-size: 0.875rem;
+    }
+
+    .stat-item {
+      color: #6b7280;
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+    }
+
+    .article-content-preview {
+      margin-top: 1rem;
+    }
+
+    .article-content-preview h4 {
+      margin: 0 0 0.75rem 0;
+      color: #1f2937;
+      font-size: 1rem;
+      font-weight: 600;
+    }
+
+    .content-display {
+      max-height: 300px;
+      max-width: 100%;
+      overflow-y: auto;
+      overflow-x: hidden;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 1rem;
+      background: white;
+      word-wrap: break-word;
+      word-break: break-word;
+    }
+
+    .content-display.html {
+      line-height: 1.6;
+    }
+
+    .content-display.html h1, .content-display.html h2, .content-display.html h3 {
+      margin-top: 0;
+      margin-bottom: 0.75rem;
+      color: #1f2937;
+    }
+
+    .content-display.html p {
+      margin-bottom: 1rem;
+      color: #374151;
+    }
+
+    .markdown-content {
+      font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+      font-size: 0.875rem;
+      line-height: 1.6;
+      color: #374151;
+      background: #f8fafc;
+      border: none;
+      padding: 0;
+      margin: 0;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+
+    .article-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-top: 1.5rem;
+      padding-top: 1rem;
+      border-top: 1px solid #e5e7eb;
+    }
+
+    .error-message {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      border-radius: 8px;
+      padding: 1.5rem;
+      text-align: center;
+    }
+
+    .error-icon {
+      font-size: 2rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .error-message h4 {
+      color: #dc2626;
+      margin: 0 0 0.5rem 0;
+      font-size: 1.125rem;
+    }
+
+    .error-message p {
+      color: #7f1d1d;
+      margin: 0 0 1rem 0;
+    }
+
+    .error-suggestions {
+      text-align: left;
+      background: white;
+      border-radius: 6px;
+      padding: 1rem;
+      margin-top: 1rem;
+    }
+
+    .error-suggestions h5 {
+      color: #dc2626;
+      margin: 0 0 0.5rem 0;
+      font-size: 0.875rem;
+      font-weight: 600;
+    }
+
+    .error-suggestions ul {
+      margin: 0;
+      padding-left: 1.25rem;
+      color: #7f1d1d;
+      font-size: 0.875rem;
+    }
+
+    .error-suggestions li {
+      margin-bottom: 0.25rem;
+    }
+  </style>
+</head>
+<body>
+  <div id="main-root" class="main-container">
+    <!-- 加载中状态 -->
+    <div class="flex items-center justify-center min-h-screen">
+      <div class="text-center">
+        <div class="loading-spinner w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full mx-auto mb-4"></div>
+        <p class="text-gray-500">加载中...</p>
+      </div>
+    </div>
+  </div>
+  
+  <!-- 应用脚本 -->
+  <!-- 核心服务 -->
+  <script src="../shared/services/FileStorageService.js"></script>
+  <script src="../shared/services/FileManager.js"></script>
+  <script src="../shared/services/MemoryManager.js"></script>
+  <script src="../shared/services/LogoCacheManager.js"></script>
+  <script src="../shared/services/ArticleExtractorService.js"></script>
+  <!-- 配置和工具 -->
+  <script src="../shared/config/platforms.js"></script>
+  <script src="../shared/utils/errorHandler.js"></script>
+  <script src="../shared/utils/storage.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>

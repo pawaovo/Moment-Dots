@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- 背景圆形 -->
+  <circle cx="64" cy="64" r="60" fill="#3B82F6"/>
+  
+  <!-- 主图标 - 发送/分享符号 -->
+  <path d="M32 64L96 32L80 64L96 96L32 64Z" fill="white" stroke="white" stroke-width="2" stroke-linejoin="round"/>
+  
+  <!-- 装饰性圆点 -->
+  <circle cx="48" cy="48" r="3" fill="white" opacity="0.8"/>
+  <circle cx="80" cy="48" r="3" fill="white" opacity="0.8"/>
+  <circle cx="48" cy="80" r="3" fill="white" opacity="0.8"/>
+  <circle cx="80" cy="80" r="3" fill="white" opacity="0.8"/>
+  
+  <!-- 边框 -->
+  <circle cx="64" cy="64" r="60" fill="none" stroke="#1E40AF" stroke-width="4"/>
+</svg>

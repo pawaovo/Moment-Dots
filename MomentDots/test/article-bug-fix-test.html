@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>文章页面Bug修复测试</title>
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .test-container {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .test-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .test-section {
+            margin-bottom: 30px;
+            padding: 15px;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+        }
+        
+        .test-button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        
+        .test-button:hover {
+            background: #0056b3;
+        }
+        
+        .test-result {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            margin-top: 10px;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+        
+        .success {
+            background: #d4edda;
+            border-color: #c3e6cb;
+            color: #155724;
+        }
+        
+        .error {
+            background: #f8d7da;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+        
+        .warning {
+            background: #fff3cd;
+            border-color: #ffeaa7;
+            color: #856404;
+        }
+        
+        .test-editor {
+            width: 100%;
+            min-height: 150px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        
+        .test-input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-header">
+        <h1>文章页面Bug修复测试</h1>
+        <p>测试文章页面的内容验证和数据保存功能</p>
+    </div>
+
+    <div class="test-container">
+        <div class="test-section">
+            <h3>1. 富文本编辑器内容验证测试</h3>
+            <p>模拟文章页面的富文本编辑器：</p>
+            <div id="test-rich-editor" class="test-editor" contenteditable="true" 
+                 data-placeholder="在这里输入文章内容..."></div>
+            <button class="test-button" onclick="testContentValidation()">测试内容验证</button>
+            <div id="validation-result" class="test-result" style="display: none;"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>2. 数据保存功能测试</h3>
+            <p>模拟文章页面的输入字段：</p>
+            <input type="text" id="test-title-input" class="test-input" placeholder="文章标题">
+            <textarea id="test-excerpt-input" class="test-input" placeholder="文章概要" rows="3"></textarea>
+            <div id="test-content-editor" class="test-editor" contenteditable="true" 
+                 data-placeholder="文章内容..."></div>
+            <button class="test-button" onclick="testDataSaving()">测试数据保存</button>
+            <div id="saving-result" class="test-result" style="display: none;"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>3. 事件监听器测试</h3>
+            <p>测试富文本编辑器的input事件：</p>
+            <div id="test-event-editor" class="test-editor" contenteditable="true" 
+                 data-placeholder="输入内容测试事件监听..."></div>
+            <button class="test-button" onclick="testEventListeners()">绑定事件监听器</button>
+            <div id="event-result" class="test-result" style="display: none;"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>4. HTML内容提取测试</h3>
+            <p>测试从contenteditable div提取HTML和文本内容：</p>
+            <div id="test-extract-editor" class="test-editor" contenteditable="true">
+                <h2>测试标题</h2>
+                <p>这是一段<strong>粗体</strong>文本，包含<a href="#">链接</a>。</p>
+                <ul>
+                    <li>列表项1</li>
+                    <li>列表项2</li>
+                </ul>
+            </div>
+            <button class="test-button" onclick="testContentExtraction()">测试内容提取</button>
+            <div id="extraction-result" class="test-result" style="display: none;"></div>
+        </div>
+    </div>
+
+    <script>
+        // 模拟appState
+        let mockAppState = {
+            title: '',
+            content: '',
+            currentContentType: '文章',
+            articleData: {}
+        };
+
+        // 测试内容验证
+        function testContentValidation() {
+            const editor = document.getElementById('test-rich-editor');
+            const resultDiv = document.getElementById('validation-result');
+            resultDiv.style.display = 'block';
+            
+            try {
+                const htmlContent = editor.innerHTML || '';
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = htmlContent;
+                const textContent = tempDiv.textContent || tempDiv.innerText || '';
+                
+                let result = '✅ 内容验证测试结果:\n\n';
+                result += `HTML内容长度: ${htmlContent.length}\n`;
+                result += `文本内容长度: ${textContent.length}\n`;
+                result += `文本内容: "${textContent.trim()}"\n\n`;
+                
+                if (textContent.trim()) {
+                    result += '✅ 验证通过：内容不为空\n';
+                    resultDiv.className = 'test-result success';
+                } else {
+                    result += '❌ 验证失败：内容为空\n';
+                    resultDiv.className = 'test-result error';
+                }
+                
+                resultDiv.textContent = result;
+                
+            } catch (error) {
+                resultDiv.className = 'test-result error';
+                resultDiv.textContent = '❌ 内容验证测试失败\n' + error.message;
+            }
+        }
+        
+        // 测试数据保存
+        function testDataSaving() {
+            const titleInput = document.getElementById('test-title-input');
+            const excerptInput = document.getElementById('test-excerpt-input');
+            const contentEditor = document.getElementById('test-content-editor');
+            const resultDiv = document.getElementById('saving-result');
+            resultDiv.style.display = 'block';
+            
+            try {
+                // 模拟数据保存逻辑
+                mockAppState.title = titleInput.value;
+                mockAppState.content = contentEditor.innerHTML || '';
+                mockAppState.articleData.excerpt = excerptInput.value;
+                
+                const dataToSave = {
+                    title: mockAppState.title,
+                    content: mockAppState.content,
+                    currentContentType: mockAppState.currentContentType,
+                    articleData: mockAppState.articleData
+                };
+                
+                let result = '✅ 数据保存测试结果:\n\n';
+                result += `标题: "${dataToSave.title}"\n`;
+                result += `内容长度: ${dataToSave.content.length}\n`;
+                result += `内容类型: ${dataToSave.currentContentType}\n`;
+                result += `概要: "${dataToSave.articleData.excerpt}"\n\n`;
+                
+                // 模拟保存到存储的日志
+                result += '[DEBUG] 保存数据到存储:\n';
+                result += JSON.stringify({
+                    title: dataToSave.title,
+                    content: dataToSave.content ? dataToSave.content.substring(0, 50) + '...' : '',
+                    contentType: dataToSave.currentContentType,
+                    hasArticleData: !!dataToSave.articleData
+                }, null, 2);
+                
+                resultDiv.className = 'test-result success';
+                resultDiv.textContent = result;
+                
+            } catch (error) {
+                resultDiv.className = 'test-result error';
+                resultDiv.textContent = '❌ 数据保存测试失败\n' + error.message;
+            }
+        }
+        
+        // 测试事件监听器
+        function testEventListeners() {
+            const editor = document.getElementById('test-event-editor');
+            const resultDiv = document.getElementById('event-result');
+            resultDiv.style.display = 'block';
+            
+            try {
+                let eventCount = 0;
+                
+                // 绑定input事件
+                const handleInput = (event) => {
+                    eventCount++;
+                    const content = event.target.innerHTML || '';
+                    mockAppState.content = content;
+                    
+                    resultDiv.textContent = `✅ 事件监听器工作正常\n` +
+                        `触发次数: ${eventCount}\n` +
+                        `当前内容: "${content}"\n` +
+                        `内容长度: ${content.length}`;
+                };
+                
+                editor.addEventListener('input', handleInput);
+                
+                resultDiv.className = 'test-result success';
+                resultDiv.textContent = '✅ 事件监听器已绑定\n请在上方编辑器中输入内容测试...';
+                
+            } catch (error) {
+                resultDiv.className = 'test-result error';
+                resultDiv.textContent = '❌ 事件监听器测试失败\n' + error.message;
+            }
+        }
+        
+        // 测试内容提取
+        function testContentExtraction() {
+            const editor = document.getElementById('test-extract-editor');
+            const resultDiv = document.getElementById('extraction-result');
+            resultDiv.style.display = 'block';
+            
+            try {
+                const htmlContent = editor.innerHTML || '';
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = htmlContent;
+                const textContent = tempDiv.textContent || tempDiv.innerText || '';
+                
+                let result = '✅ 内容提取测试结果:\n\n';
+                result += '--- HTML内容 ---\n';
+                result += htmlContent + '\n\n';
+                result += '--- 纯文本内容 ---\n';
+                result += textContent + '\n\n';
+                result += '--- 统计信息 ---\n';
+                result += `HTML长度: ${htmlContent.length}\n`;
+                result += `文本长度: ${textContent.length}\n`;
+                result += `是否包含HTML标签: ${htmlContent !== textContent}\n`;
+                
+                resultDiv.className = 'test-result success';
+                resultDiv.textContent = result;
+                
+            } catch (error) {
+                resultDiv.className = 'test-result error';
+                resultDiv.textContent = '❌ 内容提取测试失败\n' + error.message;
+            }
+        }
+        
+        // 页面加载时的初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('文章页面Bug修复测试页面已加载');
+        });
+    </script>
+</body>
+</html>

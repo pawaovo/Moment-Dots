@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>文章提取功能集成测试</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 2rem;
+      background: #f5f5f5;
+    }
+
+    .test-container {
+      background: white;
+      border-radius: 12px;
+      padding: 2rem;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+      margin-bottom: 2rem;
+    }
+
+    .test-header {
+      border-bottom: 2px solid #e5e7eb;
+      padding-bottom: 1rem;
+      margin-bottom: 2rem;
+    }
+
+    .test-header h1 {
+      color: #1f2937;
+      margin: 0;
+      font-size: 1.875rem;
+    }
+
+    .test-section {
+      margin-bottom: 2rem;
+    }
+
+    .test-section h2 {
+      color: #374151;
+      font-size: 1.25rem;
+      margin-bottom: 1rem;
+      border-left: 4px solid #3b82f6;
+      padding-left: 1rem;
+    }
+
+    .input-group {
+      margin-bottom: 1rem;
+    }
+
+    .input-group label {
+      display: block;
+      margin-bottom: 0.5rem;
+      font-weight: 500;
+      color: #374151;
+    }
+
+    .input-group input {
+      width: 100%;
+      padding: 0.75rem;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      font-size: 1rem;
+    }
+
+    .btn {
+      background: #3b82f6;
+      color: white;
+      border: none;
+      padding: 0.75rem 1.5rem;
+      border-radius: 8px;
+      font-size: 1rem;
+      cursor: pointer;
+      margin-right: 0.5rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .btn:hover {
+      background: #2563eb;
+    }
+
+    .btn-secondary {
+      background: #6b7280;
+    }
+
+    .btn-secondary:hover {
+      background: #4b5563;
+    }
+
+    .result-area {
+      background: #f8fafc;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 1rem;
+      margin-top: 1rem;
+      min-height: 200px;
+    }
+
+    .loading {
+      text-align: center;
+      color: #6b7280;
+      font-style: italic;
+    }
+
+    .error {
+      color: #dc2626;
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      padding: 1rem;
+      border-radius: 8px;
+    }
+
+    .success {
+      color: #059669;
+      background: #ecfdf5;
+      border: 1px solid #a7f3d0;
+      padding: 1rem;
+      border-radius: 8px;
+    }
+
+    .article-preview {
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 1.5rem;
+      margin-top: 1rem;
+    }
+
+    .article-title {
+      font-size: 1.5rem;
+      font-weight: 600;
+      color: #1f2937;
+      margin-bottom: 1rem;
+    }
+
+    .article-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      margin-bottom: 1rem;
+      font-size: 0.875rem;
+      color: #6b7280;
+    }
+
+    .content-preview {
+      max-height: 300px;
+      overflow-y: auto;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      padding: 1rem;
+      background: #fafafa;
+      font-size: 0.875rem;
+      line-height: 1.6;
+    }
+
+    .format-toggle {
+      margin: 1rem 0;
+    }
+
+    .markdown-content {
+      font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+
+    .test-urls {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+
+    .test-url-card {
+      background: #f8fafc;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 1rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .test-url-card:hover {
+      background: #e5e7eb;
+      border-color: #3b82f6;
+    }
+
+    .test-url-card h3 {
+      margin: 0 0 0.5rem 0;
+      font-size: 1rem;
+      color: #1f2937;
+    }
+
+    .test-url-card p {
+      margin: 0;
+      font-size: 0.875rem;
+      color: #6b7280;
+      word-break: break-all;
+    }
+  </style>
+</head>
+<body>
+  <div class="test-container">
+    <div class="test-header">
+      <h1>🔍 文章提取功能集成测试</h1>
+      <p>测试MomentDots扩展程序的文章内容提取功能</p>
+    </div>
+
+    <div class="test-section">
+      <h2>📝 手动测试</h2>
+      <div class="input-group">
+        <label for="test-url">输入文章链接：</label>
+        <input type="url" id="test-url" placeholder="https://example.com/article">
+      </div>
+      <button class="btn" onclick="testArticleExtraction()">🚀 开始提取</button>
+      <button class="btn btn-secondary" onclick="clearResults()">🗑️ 清除结果</button>
+    </div>
+
+    <div class="test-section">
+      <h2>🎯 预设测试链接</h2>
+      <div class="test-urls">
+        <div class="test-url-card" onclick="loadTestUrl('https://mp.weixin.qq.com/s/example')">
+          <h3>📱 微信公众号</h3>
+          <p>https://mp.weixin.qq.com/s/example</p>
+        </div>
+        <div class="test-url-card" onclick="loadTestUrl('https://www.zhihu.com/question/example')">
+          <h3>🤔 知乎问答</h3>
+          <p>https://www.zhihu.com/question/example</p>
+        </div>
+        <div class="test-url-card" onclick="loadTestUrl('https://okjike.com/originalPost/example')">
+          <h3>💭 即刻动态</h3>
+          <p>https://okjike.com/originalPost/example</p>
+        </div>
+        <div class="test-url-card" onclick="loadTestUrl('https://juejin.cn/post/example')">
+          <h3>💎 掘金文章</h3>
+          <p>https://juejin.cn/post/example</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="test-section">
+      <h2>📊 提取结果</h2>
+      <div id="result-area" class="result-area">
+        <p class="loading">点击"开始提取"按钮测试文章提取功能</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 引入必要的脚本 -->
+  <script src="../libs/readability/Readability.js"></script>
+  <script src="../libs/readability/Readability-readerable.js"></script>
+  <script src="../libs/readability/JSDOMParser.js"></script>
+  <script src="../shared/services/ArticleExtractorService.js"></script>
+
+  <script>
+    let currentArticle = null;
+    let currentFormat = 'html';
+
+    function loadTestUrl(url) {
+      document.getElementById('test-url').value = url;
+    }
+
+    function clearResults() {
+      document.getElementById('result-area').innerHTML = '<p class="loading">点击"开始提取"按钮测试文章提取功能</p>';
+      currentArticle = null;
+    }
+
+    async function testArticleExtraction() {
+      const urlInput = document.getElementById('test-url');
+      const url = urlInput.value.trim();
+      const resultArea = document.getElementById('result-area');
+
+      if (!url) {
+        resultArea.innerHTML = '<div class="error">请输入有效的文章链接</div>';
+        return;
+      }
+
+      resultArea.innerHTML = '<div class="loading">🔄 正在提取文章内容，请稍候...</div>';
+
+      try {
+        // 创建ArticleExtractorService实例
+        const extractor = new ArticleExtractorService();
+        
+        // 模拟在新标签页中提取文章
+        const result = await simulateArticleExtraction(url);
+        
+        if (result.error) {
+          throw new Error(result.error);
+        }
+
+        currentArticle = result;
+        displayArticleResult(result);
+        
+      } catch (error) {
+        console.error('提取失败:', error);
+        resultArea.innerHTML = `
+          <div class="error">
+            <h3>❌ 提取失败</h3>
+            <p><strong>错误信息：</strong>${error.message}</p>
+            <p><strong>建议：</strong></p>
+            <ul>
+              <li>检查网址是否正确</li>
+              <li>确保网页可以正常访问</li>
+              <li>某些网站可能有反爬虫保护</li>
+              <li>尝试使用其他测试链接</li>
+            </ul>
+          </div>
+        `;
+      }
+    }
+
+    async function simulateArticleExtraction(url) {
+      // 这里模拟文章提取过程
+      // 在实际扩展程序中，这会通过chrome.scripting.executeScript执行
+      
+      console.log('模拟提取文章:', url);
+      
+      // 模拟返回的文章数据 - 包含很长的内容来测试布局
+      const longContent = `
+        <h2>这是一个测试文章标题，用来测试长内容对布局的影响</h2>
+        <p>这里是文章的主要内容。在实际使用中，这些内容会通过Mozilla Readability算法从网页中提取。这段内容特意写得很长，用来测试当文章内容很长时，页面布局是否会被撑开或变形。</p>
+
+        <h3>第一部分：技术介绍</h3>
+        <p>Mozilla Readability是一个非常强大的内容提取算法，它能够智能地识别网页中的主要内容，过滤掉广告、导航栏、侧边栏等无关信息。这个算法最初是为Firefox浏览器的阅读模式开发的，现在已经被广泛应用于各种内容提取场景。</p>
+
+        <img src="https://mmbiz.qpic.cn/mmbiz_png/OjgKEXmLURrj3QKXuGwib2IAnhU7TqqyRKPibTtWMgupN7vibxMZGYNGNGgUIW3uJ62icmsL7NzvDTe8ibG1JQzibz1g/640?wx_fmt=png&from=appmsg" alt="技术架构图" />
+
+        <p>该算法的核心原理是通过分析HTML结构、CSS样式、文本密度等多个维度的特征，来判断哪些内容是文章的主体部分。它使用了机器学习和启发式规则相结合的方法，能够处理各种复杂的网页结构。</p>
+
+        <img src="data:image/svg+xml,%3C%3Fxml version='1.0' encoding='UTF-8'%3F%3E%3Csvg width='1px' height='1px' viewBox='0 0 1 1' version='1.1' xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink'%3E%3Ctitle%3E%3C/title%3E%3Cg stroke='none' stroke-width='1' fill='none' fill-rule='evenodd' fill-opacity='0'%3E%3Cg transform='translate(-249.000000, -126.000000)' fill='%23FFFFFF'%3E%3Crect x='249' y='126' width='1' height='1'%3E%3C/rect%3E%3C/g%3E%3C/g%3E%3C/svg%3E" alt="占位符图片" data-original-src="https://mmbiz.qpic.cn/mmbiz_jpg/OjgKEXmLURrj3QKXuGwib2IAnhU7TqqyRKPibTtWMgupN7vibxMZGYNGNGgUIW3uJ62icmsL7NzvDTe8ibG1JQzibz1g/640?wx_fmt=jpeg&from=appmsg" />
+
+        <h3>第二部分：实现细节</h3>
+        <p>在我们的扩展程序中，文章提取功能的实现包含以下几个关键步骤：</p>
+        <ol>
+          <li><strong>页面加载和预处理</strong>：首先在新标签页中打开目标URL，等待页面完全加载</li>
+          <li><strong>智能滚动</strong>：自动滚动页面以触发懒加载内容，确保获取完整的文章内容</li>
+          <li><strong>内容提取</strong>：使用Mozilla Readability算法提取主要内容</li>
+          <li><strong>内容增强</strong>：提取图片、链接、视频等媒体信息，生成摘要和元数据</li>
+          <li><strong>格式转换</strong>：支持HTML和Markdown两种格式的显示和导出</li>
+        </ol>
+
+        <h3>第三部分：用户体验优化</h3>
+        <p>为了提供最佳的用户体验，我们在界面设计和交互流程上做了大量的优化工作。文章内容的显示采用了响应式设计，能够适应不同屏幕尺寸的设备。同时，我们还添加了丰富的视觉反馈，包括加载状态、成功提示、错误处理等。</p>
+
+        <p>特别值得一提的是，我们实现了HTML和Markdown格式的实时切换功能。用户可以根据自己的需要，选择查看原始的HTML格式，或者转换为更适合编辑的Markdown格式。这个功能对于内容创作者来说非常实用。</p>
+
+        <blockquote>
+          <p>这是一个引用块，用来测试引用内容的显示效果。引用块通常用来突出显示重要的信息或者引用其他来源的内容。在我们的实现中，引用块会有特殊的样式处理，使其在视觉上与普通段落区分开来。</p>
+        </blockquote>
+
+        <h3>第四部分：技术挑战和解决方案</h3>
+        <p>在开发过程中，我们遇到了一些技术挑战，特别是在处理Chrome扩展程序的安全限制方面。Chrome扩展程序的Manifest V3规范对脚本注入有严格的限制，不能直接传递类的静态方法给executeScript函数。</p>
+
+        <p>为了解决这个问题，我们重新设计了代码架构，将所有需要在页面上下文中执行的逻辑封装成独立的函数，确保这些函数是完全自包含的，不依赖外部的类或模块。这样既满足了安全要求，又保证了功能的完整性。</p>
+
+        <pre><code>// 示例代码：独立的提取函数
+function getExtractionFunction() {
+  return async function() {
+    // 所有逻辑都在这个函数内部
+    console.log('开始提取文章内容...');
+    // ... 提取逻辑
+  };
+}</code></pre>
+
+        <h3>第五部分：测试和验证</h3>
+        <p>为了确保功能的稳定性和可靠性，我们建立了完整的测试体系。包括单元测试、集成测试和端到端测试。特别是使用Playwright进行自动化测试，能够模拟真实的用户操作场景，验证各种功能是否正常工作。</p>
+
+        <p>测试覆盖了多个主流平台，包括微信公众号、知乎、即刻、掘金等。每个平台都有其特殊的页面结构和内容组织方式，我们的算法都能够很好地适应和处理。</p>
+
+        <p>这段超长的内容主要用来测试当文章内容很长时，页面布局是否会保持稳定，不会出现横向拉伸或者其他布局问题。通过这个测试，我们可以验证CSS样式的修复是否有效。</p>
+      `;
+
+      return {
+        title: "超长测试文章：验证布局稳定性和内容显示效果",
+        content: longContent,
+        textContent: longContent.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim(),
+        excerpt: "这是一个包含超长内容的测试文章，主要用来验证当文章内容很长时，页面布局是否会保持稳定，不会出现横向拉伸或其他布局问题。",
+        byline: "测试作者",
+        siteName: "测试网站",
+        platform: "测试平台",
+        length: 2500,
+        readingTime: 8,
+        images: [
+          { src: "https://via.placeholder.com/800x400", alt: "超宽测试图片", caption: "这是一张超宽的测试图片，用来测试图片是否会撑开容器" },
+          { src: "https://via.placeholder.com/300x200", alt: "普通测试图片", caption: "这是一张普通的测试图片" }
+        ],
+        links: [
+          { url: "https://example.com/very-long-url-that-might-cause-layout-issues", text: "这是一个很长的链接文本，用来测试长链接是否会影响布局", isExternal: true },
+          { url: "https://mozilla.org/readability", text: "Mozilla Readability", isExternal: true }
+        ],
+        videos: [
+          { src: "https://example.com/video.mp4", type: "video", title: "测试视频", platform: "Unknown" }
+        ],
+        url: url,
+        timestamp: new Date().toISOString(),
+        extractionMethod: 'mozilla-readability-enhanced'
+      };
+    }
+
+    function displayArticleResult(article) {
+      const resultArea = document.getElementById('result-area');
+      
+      resultArea.innerHTML = `
+        <div class="success">
+          <h3>✅ 提取成功</h3>
+          <p>成功提取文章内容，共 ${article.length} 个字符</p>
+        </div>
+        
+        <div class="article-preview">
+          <div class="article-title">${escapeHtml(article.title)}</div>
+          
+          <div class="article-meta">
+            <span>📱 ${escapeHtml(article.platform)}</span>
+            <span>✍️ ${escapeHtml(article.byline)}</span>
+            <span>⏱️ 约 ${article.readingTime} 分钟</span>
+            <span>📝 ${article.length} 字符</span>
+            ${article.images?.length ? `<span>🖼️ ${article.images.length} 张图片</span>` : ''}
+            ${article.links?.length ? `<span>🔗 ${article.links.length} 个链接</span>` : ''}
+          </div>
+
+          ${article.excerpt ? `
+            <div style="background: #f0f9ff; border-left: 4px solid #0ea5e9; padding: 1rem; margin: 1rem 0; border-radius: 0 8px 8px 0;">
+              <h4 style="margin: 0 0 0.5rem 0; color: #0c4a6e;">摘要</h4>
+              <p style="margin: 0; color: #075985;">${escapeHtml(article.excerpt)}</p>
+            </div>
+          ` : ''}
+
+          <div class="format-toggle">
+            <button class="btn btn-secondary" onclick="toggleFormat()">
+              🔄 切换格式
+            </button>
+          </div>
+
+          <div class="content-preview" id="content-preview">
+            ${currentFormat === 'html' ? article.content : `<div class="markdown-content">${renderMarkdownToHtml(htmlToMarkdown(article.content))}</div>`}
+          </div>
+        </div>
+      `;
+    }
+
+    function toggleFormat() {
+      if (!currentArticle) return;
+      
+      currentFormat = currentFormat === 'html' ? 'markdown' : 'html';
+      
+      const contentPreview = document.getElementById('content-preview');
+      if (contentPreview) {
+        contentPreview.innerHTML = currentFormat === 'html' ?
+          currentArticle.content :
+          `<div class="markdown-content">${renderMarkdownToHtml(htmlToMarkdown(currentArticle.content))}</div>`;
+      }
+      
+      // 更新按钮文字
+      const toggleBtn = document.querySelector('.format-toggle button');
+      if (toggleBtn) {
+        toggleBtn.textContent = `🔄 切换格式`;
+      }
+    }
+
+    function htmlToMarkdown(html) {
+      if (!html) return '';
+
+      // 改进的HTML到Markdown转换，支持图片
+      return html
+        .replace(/<h([1-6])>(.*?)<\/h[1-6]>/g, (match, level, text) => {
+          return '\n' + '#'.repeat(parseInt(level)) + ' ' + text + '\n\n';
+        })
+        .replace(/<p>(.*?)<\/p>/g, '\n$1\n\n')
+        .replace(/<strong>(.*?)<\/strong>/g, '**$1**')
+        .replace(/<em>(.*?)<\/em>/g, '*$1*')
+        .replace(/<a[^>]*href="([^"]*)"[^>]*>(.*?)<\/a>/g, '[$2]($1)')
+        // 图片处理 - 优先使用原始图片URL，过滤占位符SVG
+        .replace(/<img[^>]*>/g, (match) => {
+          const srcMatch = match.match(/(?:data-original-src|data-src|src)="([^"]*)"/);
+          const altMatch = match.match(/alt="([^"]*)"/);
+
+          if (srcMatch) {
+            const src = srcMatch[1];
+            const alt = altMatch ? altMatch[1] : '图片';
+
+            // 过滤掉占位符SVG
+            if (!src.startsWith('data:image/svg+xml') && src.trim() !== '') {
+              return `![${alt}](${src})`;
+            }
+          }
+          return '';
+        })
+        .replace(/<br\s*\/?>/g, '\n')
+        .replace(/<[^>]*>/g, '')
+        .replace(/\n\s*\n\s*\n/g, '\n\n')
+        .trim();
+    }
+
+    function renderMarkdownToHtml(markdown) {
+      if (!markdown) return '';
+
+      return markdown
+        // 标题
+        .replace(/^### (.*$)/gm, '<h3>$1</h3>')
+        .replace(/^## (.*$)/gm, '<h2>$1</h2>')
+        .replace(/^# (.*$)/gm, '<h1>$1</h1>')
+
+        // 图片 - 关键修复：将Markdown图片语法转换为HTML img标签
+        .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" style="max-width: 100%; height: auto; margin: 10px 0;" />')
+
+        // 链接
+        .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>')
+
+        // 粗体和斜体
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+
+        // 代码
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+
+        // 引用
+        .replace(/^> (.*)$/gm, '<blockquote>$1</blockquote>')
+
+        // 分割线
+        .replace(/^---$/gm, '<hr>')
+
+        // 段落 - 将双换行转换为段落
+        .replace(/\n\n/g, '</p><p>')
+        .replace(/^/, '<p>')
+        .replace(/$/, '</p>')
+
+        // 清理空段落
+        .replace(/<p><\/p>/g, '')
+        .replace(/<p>\s*<\/p>/g, '');
+    }
+
+    function escapeHtml(text) {
+      if (!text) return '';
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // 页面加载完成后的初始化
+    document.addEventListener('DOMContentLoaded', function() {
+      console.log('文章提取测试页面已加载');
+      console.log('ArticleExtractorService可用:', typeof ArticleExtractorService !== 'undefined');
+      console.log('Readability可用:', typeof Readability !== 'undefined');
+    });
+  </script>
+</body>
+</html>
