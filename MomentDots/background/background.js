@@ -36,7 +36,7 @@ async function initializePromptData() {
         {
           id: 'gemini-2.5-flash',
           name: 'Gemini 2.5 Flash',
-          apiKey: 'AIzaSyDJ8RG1hMXCNWNlQ-uCzeCQCRq_RRx28Bc',
+          apiKey: '', // 用户需要在设置中配置
           endpoint: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent'
         }
       ],

@@ -123,6 +123,27 @@ class PromptApp {
         }
     }
 
+    // 统一的Modal管理器初始化方法
+    ensureModalManagersInitialized() {
+        if (!window.promptFormModalManager && window.createPromptModalManagers) {
+            window.createPromptModalManagers();
+        }
+    }
+
+    // 统一的错误处理方法
+    handleError(error, operation = '操作') {
+        console.error(`${operation}失败:`, error);
+        const errorMessage = error.message || `${operation}失败，请重试`;
+        PromptToastManager.show(errorMessage, 'error');
+    }
+
+    // 性能优化：批量DOM操作
+    batchDOMUpdates(callback) {
+        requestAnimationFrame(() => {
+            callback();
+        });
+    }
+
     async loadData() {
         console.log('开始加载数据，存储键:', this.STORAGE_KEYS);
 
@@ -151,48 +172,13 @@ class PromptApp {
         this.render();
     }
 
-    cacheElements() {
-        // 缓存常用的DOM元素
-        this.elements = {
-            addPromptBtn: document.getElementById('promptAddBtn'),
-            settingsBtn: document.getElementById('promptSettingsBtn'),
-            exportBtn: document.getElementById('promptExportBtn'),
-            importBtn: document.getElementById('promptImportBtn'),
-            importFile: document.getElementById('promptImportFile'),
-            categoryTabs: document.getElementById('promptCategoryTabs'),
-            promptList: document.getElementById('promptList'),
-
-            // 弹窗相关元素
-            closeModalBtn: document.getElementById('promptCloseModalBtn'),
-            cancelBtn: document.getElementById('promptCancelBtn'),
-            closeRewriteBtn: document.getElementById('promptCloseRewriteBtn'),
-            cancelRewriteBtn: document.getElementById('promptCancelRewriteBtn'),
-            closeSettingsBtn: document.getElementById('promptCloseSettingsBtn'),
-            cancelSettingsBtn: document.getElementById('promptCancelSettingsBtn'),
-            saveSettingsBtn: document.getElementById('promptSaveSettingsBtn'),
-
-            // 设置表单元素
-            apiKey: document.getElementById('promptApiKey'),
-            apiEndpoint: document.getElementById('promptApiEndpoint'),
-            defaultModel: document.getElementById('promptDefaultModel')
-        };
-    }
-
-    async loadData() {
-        const data = await chrome.storage.local.get(this.STORAGE_KEYS);
-        this.categories = data.promptCategories || ['全部'];
-        this.prompts = data.promptPrompts || [];
-        this.settings = data.promptSettings || {};
-    }
-
     bindEvents() {
         // 确保modal管理器已初始化
-        if (!window.promptFormModalManager && window.createPromptModalManagers) {
-            window.createPromptModalManagers();
-        }
+        this.ensureModalManagersInitialized();
 
         // 使用缓存的DOM元素绑定事件
         this.elements.addPromptBtn?.addEventListener('click', () => {
+            this.ensureModalManagersInitialized();
             if (window.promptFormModalManager) {
                 window.promptFormModalManager.openAddModal();
             } else {
@@ -231,9 +217,7 @@ class PromptApp {
 
     bindModalCloseEvents() {
         // 确保modal管理器已初始化
-        if (!window.promptModalManager && window.createPromptModalManagers) {
-            window.createPromptModalManagers();
-        }
+        this.ensureModalManagersInitialized();
 
         // 使用缓存的DOM元素和统一的事件处理
         const modalEvents = [
@@ -355,9 +339,7 @@ class PromptApp {
 
     handlePromptAction(action, prompt) {
         // 确保modal管理器已初始化
-        if (!window.promptFormModalManager && window.createPromptModalManagers) {
-            window.createPromptModalManagers();
-        }
+        this.ensureModalManagersInitialized();
 
         switch (action) {
             case 'rewrite':
@@ -391,16 +373,13 @@ class PromptApp {
             this.render();
             PromptToastManager.show('删除成功', 'success');
         } catch (error) {
-            console.error('删除失败:', error);
-            PromptToastManager.show('删除失败', 'error');
+            this.handleError(error, '删除提示词');
         }
     }
 
     openSettingsModal() {
         // 确保modal管理器已初始化
-        if (!window.promptModalManager && window.createPromptModalManagers) {
-            window.createPromptModalManagers();
-        }
+        this.ensureModalManagersInitialized();
 
         // 填充当前设置
         if (this.elements.apiKey && this.settings.models?.[0]?.apiKey) {
@@ -473,8 +452,7 @@ class PromptApp {
             }
             PromptToastManager.show('设置保存成功', 'success');
         } catch (error) {
-            console.error('保存设置失败:', error);
-            PromptToastManager.show('保存设置失败', 'error');
+            this.handleError(error, '保存设置');
         }
     }
 
@@ -498,8 +476,7 @@ class PromptApp {
             URL.revokeObjectURL(url);
             PromptToastManager.show('导出成功', 'success');
         } catch (error) {
-            console.error('导出失败:', error);
-            PromptToastManager.show('导出失败', 'error');
+            this.handleError(error, '导出数据');
         }
     }
 
