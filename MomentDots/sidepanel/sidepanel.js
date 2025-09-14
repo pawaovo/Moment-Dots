@@ -78,21 +78,26 @@ function switchToView(viewType) {
   sidepanelState.currentView = viewType;
 
   if (viewType === 'status') {
-    // 显示状态视图
-    elements.statusView.style.display = 'flex';
-    elements.promptView.style.display = 'none';
+    // 显示状态视图，隐藏提示词视图
+    elements.statusView.classList.remove('hidden');
+    elements.promptView.classList.add('hidden');
 
     // 更新按钮样式
-    elements.statusViewBtn.className = 'flex-1 px-3 py-2 text-sm font-medium rounded-md bg-blue-100 text-blue-700';
-    elements.promptViewBtn.className = 'flex-1 px-3 py-2 text-sm font-medium rounded-md text-gray-500 hover:text-gray-700 ml-2';
+    elements.statusViewBtn.className = 'nav-button active';
+    elements.promptViewBtn.className = 'nav-button';
+
+    // 确保状态视图重新渲染
+    setTimeout(() => {
+      renderSidepanel();
+    }, 50);
   } else if (viewType === 'prompt') {
-    // 显示提示词视图
-    elements.statusView.style.display = 'none';
-    elements.promptView.style.display = 'flex';
+    // 显示提示词视图，隐藏状态视图
+    elements.statusView.classList.add('hidden');
+    elements.promptView.classList.remove('hidden');
 
     // 更新按钮样式
-    elements.statusViewBtn.className = 'flex-1 px-3 py-2 text-sm font-medium rounded-md text-gray-500 hover:text-gray-700';
-    elements.promptViewBtn.className = 'flex-1 px-3 py-2 text-sm font-medium rounded-md bg-blue-100 text-blue-700 ml-2';
+    elements.statusViewBtn.className = 'nav-button';
+    elements.promptViewBtn.className = 'nav-button active';
   }
 }
 
