@@ -5,7 +5,8 @@ console.log('Sidepanel script loaded');
 let sidepanelState = {
   publishResults: [],
   isPublishing: false,
-  lastUpdate: null
+  lastUpdate: null,
+  currentView: 'status' // 'status' 或 'prompt'
 };
 
 // DOM 元素引用
@@ -21,6 +22,13 @@ async function initializeSidepanel() {
   try {
     // 获取DOM元素
     elements.root = document.getElementById('sidepanel-root');
+    elements.statusView = document.getElementById('statusView');
+    elements.promptView = document.getElementById('promptView');
+    elements.statusViewBtn = document.getElementById('statusViewBtn');
+    elements.promptViewBtn = document.getElementById('promptViewBtn');
+
+    // 设置视图切换事件
+    setupViewSwitching();
 
     // 初始化Logo缓存管理器
     if (typeof LogoCacheManager !== 'undefined') {
@@ -48,6 +56,46 @@ async function initializeSidepanel() {
   }
 }
 
+// 设置视图切换功能
+function setupViewSwitching() {
+  console.log('设置视图切换功能...');
+
+  // 状态视图按钮
+  elements.statusViewBtn?.addEventListener('click', () => {
+    switchToView('status');
+  });
+
+  // 提示词视图按钮
+  elements.promptViewBtn?.addEventListener('click', () => {
+    switchToView('prompt');
+  });
+}
+
+// 切换视图
+function switchToView(viewType) {
+  console.log(`切换到视图: ${viewType}`);
+
+  sidepanelState.currentView = viewType;
+
+  if (viewType === 'status') {
+    // 显示状态视图
+    elements.statusView.style.display = 'flex';
+    elements.promptView.style.display = 'none';
+
+    // 更新按钮样式
+    elements.statusViewBtn.className = 'flex-1 px-3 py-2 text-sm font-medium rounded-md bg-blue-100 text-blue-700';
+    elements.promptViewBtn.className = 'flex-1 px-3 py-2 text-sm font-medium rounded-md text-gray-500 hover:text-gray-700 ml-2';
+  } else if (viewType === 'prompt') {
+    // 显示提示词视图
+    elements.statusView.style.display = 'none';
+    elements.promptView.style.display = 'flex';
+
+    // 更新按钮样式
+    elements.statusViewBtn.className = 'flex-1 px-3 py-2 text-sm font-medium rounded-md text-gray-500 hover:text-gray-700';
+    elements.promptViewBtn.className = 'flex-1 px-3 py-2 text-sm font-medium rounded-md bg-blue-100 text-blue-700 ml-2';
+  }
+}
+
 // 加载保存的状态
 async function loadSavedState() {
   try {
@@ -64,7 +112,7 @@ async function loadSavedState() {
 
 // 渲染侧边栏界面
 function renderSidepanel() {
-  if (!elements.root) return;
+  if (!elements.statusView) return;
 
   const hasResults = sidepanelState.publishResults.length > 0;
 
@@ -80,7 +128,7 @@ function renderSidepanel() {
 
 // 渲染空状态
 function renderEmptyState() {
-  elements.root.innerHTML = `
+  elements.statusView.innerHTML = `
     <div class="flex flex-col items-center justify-center h-full p-6 text-center">
       <div class="w-16 h-16 mb-4 bg-gray-200 rounded-full flex items-center justify-center">
         <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -98,7 +146,7 @@ function renderPublishStatus() {
   const statusHtml = sidepanelState.publishResults.map(result => createStatusItem(result)).join('');
   const stats = calculatePublishStats();
 
-  elements.root.innerHTML = `
+  elements.statusView.innerHTML = `
     <div class="flex flex-col h-full">
       <!-- 头部 -->
       <div class="flex-shrink-0 p-4 border-b border-gray-200 bg-white">

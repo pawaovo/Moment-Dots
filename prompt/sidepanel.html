@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prompt 助手</title>
+    <link rel="stylesheet" href="sidepanel.css">
+    <link rel="stylesheet" href="components/modal.css">
+</head>
+<body>
+    <div class="container">
+        <!-- 顶部分类导航栏 -->
+        <div class="category-nav">
+            <div class="category-tabs" id="categoryTabs">
+                <!-- 分类标签将通过JS动态生成 -->
+            </div>
+            <button class="add-btn" id="addPromptBtn" title="添加提示词">+</button>
+        </div>
+
+        <!-- 提示词卡片列表 -->
+        <div class="prompt-list" id="promptList">
+            <!-- 提示词卡片将通过JS动态生成 -->
+        </div>
+
+        <!-- 底部操作区 -->
+        <div class="bottom-actions">
+            <div class="action-row">
+                <button class="action-btn" id="exportBtn" title="导出数据">
+                    <span class="icon">📤</span>
+                    导出
+                </button>
+                <button class="action-btn" id="importBtn" title="导入数据">
+                    <span class="icon">📥</span>
+                    导入
+                </button>
+                <button class="settings-btn" id="settingsBtn">
+                    <span class="icon">⚙️</span>
+                    设置
+                </button>
+            </div>
+            <input type="file" id="importFile" accept=".json" style="display: none;">
+        </div>
+    </div>
+
+    <!-- 添加/编辑提示词弹窗 -->
+    <div class="modal" id="promptModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modalTitle">新增提示词</h3>
+                <button class="close-btn" id="closeModalBtn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="promptForm">
+                    <div class="form-group">
+                        <label for="promptName">提示词名称 <span class="required">*</span></label>
+                        <input type="text" id="promptName" placeholder="请输入提示词名称" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="promptContent">提示词内容 <span class="required">*</span></label>
+                        <textarea id="promptContent" placeholder="请输入提示词内容" required></textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="promptCategory">分类</label>
+                        <input type="text" id="promptCategory" placeholder="请输入分类（可选）">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="promptModel">推荐模型</label>
+                        <select id="promptModel">
+                            <!-- 模型选项将通过JS动态生成 -->
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" id="cancelBtn">取消</button>
+                <button type="submit" class="btn btn-primary" id="saveBtn" form="promptForm">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI改写弹窗 -->
+    <div class="modal" id="rewriteModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>AI改写</h3>
+                <button class="close-btn" id="closeRewriteBtn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="originalText">原始文案</label>
+                    <textarea id="originalText" placeholder="请输入需要改写的文案内容"></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label for="rewrittenText">改写结果</label>
+                    <textarea id="rewrittenText" placeholder="AI改写结果将显示在这里" readonly></textarea>
+                </div>
+                
+                <div class="loading" id="loadingIndicator" style="display: none;">
+                    <span class="spinner"></span>
+                    正在改写中...
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" id="cancelRewriteBtn">取消</button>
+                <button type="button" class="btn btn-primary" id="rewriteBtn">开始改写</button>
+                <button type="button" class="btn btn-success" id="copyResultBtn" style="display: none;">复制结果</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 设置弹窗 -->
+    <div class="modal" id="settingsModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>设置</h3>
+                <button class="close-btn" id="closeSettingsBtn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="apiKey">API Key</label>
+                    <input type="password" id="apiKey" placeholder="请输入API Key">
+                </div>
+                
+                <div class="form-group">
+                    <label for="apiEndpoint">API端点</label>
+                    <input type="url" id="apiEndpoint" placeholder="请输入API端点URL">
+                </div>
+                
+                <div class="form-group">
+                    <label for="defaultModel">默认模型</label>
+                    <select id="defaultModel">
+                        <!-- 模型选项将通过JS动态生成 -->
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" id="cancelSettingsBtn">取消</button>
+                <button type="button" class="btn btn-primary" id="saveSettingsBtn">保存设置</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="components/api.js"></script>
+    <script src="components/modal.js"></script>
+    <script src="sidepanel.js"></script>
+</body>
+</html>

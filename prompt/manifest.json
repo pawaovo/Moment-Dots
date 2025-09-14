@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "Prompt - AI文案改写助手",
+  "version": "1.0.0",
+  "description": "通过AI大模型API快速改写文案内容的浏览器侧边栏扩展",
+  
+  "permissions": [
+    "storage",
+    "sidePanel"
+  ],
+  
+  "host_permissions": [
+    "https://generativelanguage.googleapis.com/*"
+  ],
+  
+  "background": {
+    "service_worker": "background.js"
+  },
+  
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  
+  "action": {
+    "default_title": "打开 Prompt 助手"
+  },
+
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

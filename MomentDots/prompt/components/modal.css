@@ -1,0 +1,273 @@
+/* 提示词弹窗样式 - 集成到MomentDots */
+
+.prompt-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    backdrop-filter: blur(4px);
+}
+
+.prompt-modal.show {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: prompt-fadeIn 0.2s ease;
+}
+
+.prompt-modal-content {
+    background: white;
+    border-radius: 12px;
+    width: 90%;
+    max-width: 500px;
+    max-height: 90vh;
+    overflow: hidden;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+    animation: prompt-slideUp 0.3s ease;
+}
+
+.prompt-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 24px;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.prompt-modal-header h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: #333;
+}
+
+.prompt-close-btn {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: #6c757d;
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: all 0.2s ease;
+}
+
+.prompt-close-btn:hover {
+    background: #f8f9fa;
+    color: #495057;
+}
+
+.prompt-modal-body {
+    padding: 24px;
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+.prompt-modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    padding: 20px 24px;
+    border-top: 1px solid #e0e0e0;
+    background: #f8f9fa;
+}
+
+/* 表单样式 */
+.prompt-form-group {
+    margin-bottom: 20px;
+}
+
+.prompt-form-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 500;
+    color: #374151;
+    font-size: 14px;
+}
+
+.prompt-required {
+    color: #ef4444;
+}
+
+.prompt-form-group input,
+.prompt-form-group textarea,
+.prompt-form-group select {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 14px;
+    transition: all 0.2s ease;
+    font-family: inherit;
+}
+
+.prompt-form-group input:focus,
+.prompt-form-group textarea:focus,
+.prompt-form-group select:focus {
+    outline: none;
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.prompt-form-group textarea {
+    min-height: 100px;
+    resize: vertical;
+}
+
+/* 按钮样式 */
+.prompt-btn {
+    padding: 10px 20px;
+    border-radius: 8px;
+    border: none;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+
+.prompt-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.prompt-btn-primary {
+    background: #6366f1;
+    color: white;
+}
+
+.prompt-btn-primary:hover:not(:disabled) {
+    background: #5856eb;
+}
+
+.prompt-btn-secondary {
+    background: #f3f4f6;
+    color: #374151;
+}
+
+.prompt-btn-secondary:hover:not(:disabled) {
+    background: #e5e7eb;
+}
+
+.prompt-btn-success {
+    background: #10b981;
+    color: white;
+}
+
+.prompt-btn-success:hover:not(:disabled) {
+    background: #059669;
+}
+
+.prompt-btn-danger {
+    background: #ef4444;
+    color: white;
+}
+
+.prompt-btn-danger:hover:not(:disabled) {
+    background: #dc2626;
+}
+
+/* 加载指示器 */
+.prompt-loading {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 20px;
+    color: #6b7280;
+}
+
+.prompt-spinner {
+    width: 20px;
+    height: 20px;
+    border: 2px solid #e5e7eb;
+    border-top: 2px solid #6366f1;
+    border-radius: 50%;
+    animation: prompt-spin 1s linear infinite;
+}
+
+/* 动画效果 */
+@keyframes prompt-fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes prompt-slideUp {
+    from {
+        transform: translateY(30px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+@keyframes prompt-spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* 响应式设计 */
+@media (max-width: 480px) {
+    .prompt-modal-content {
+        width: 95%;
+        margin: 20px;
+    }
+    
+    .prompt-modal-header,
+    .prompt-modal-body,
+    .prompt-modal-footer {
+        padding: 16px;
+    }
+    
+    .prompt-modal-footer {
+        flex-direction: column;
+    }
+    
+    .prompt-btn {
+        width: 100%;
+    }
+}
+
+/* 特殊弹窗样式 */
+.prompt-rewrite-modal .prompt-modal-content {
+    max-width: 600px;
+}
+
+.prompt-settings-modal .prompt-modal-content {
+    max-width: 450px;
+}
+
+/* 文本区域特殊样式 */
+.prompt-form-group textarea[readonly] {
+    background-color: #f9fafb;
+    color: #374151;
+}
+
+/* 成功状态样式 */
+.prompt-success-indicator {
+    color: #10b981;
+    font-size: 16px;
+}
+
+.prompt-error-indicator {
+    color: #ef4444;
+    font-size: 16px;
+}

@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>提示词助手</title>
+    <link rel="stylesheet" href="sidepanel.css">
+    <link rel="stylesheet" href="components/modal.css">
+</head>
+<body>
+    <div class="prompt-container">
+        <!-- 顶部分类导航栏 -->
+        <div class="prompt-category-nav">
+            <div class="prompt-category-tabs" id="promptCategoryTabs">
+                <!-- 分类标签将通过JS动态生成 -->
+            </div>
+            <button class="prompt-add-btn" id="promptAddBtn" title="添加提示词">+</button>
+        </div>
+
+        <!-- 提示词卡片列表 -->
+        <div class="prompt-list" id="promptList">
+            <!-- 提示词卡片将通过JS动态生成 -->
+        </div>
+
+        <!-- 底部操作区 -->
+        <div class="prompt-bottom-actions">
+            <div class="prompt-action-row">
+                <button class="prompt-action-btn-large" id="promptExportBtn" title="导出数据">
+                    <span class="icon">📤</span>
+                    导出
+                </button>
+                <button class="prompt-action-btn-large" id="promptImportBtn" title="导入数据">
+                    <span class="icon">📥</span>
+                    导入
+                </button>
+                <button class="prompt-settings-btn" id="promptSettingsBtn">
+                    <span class="icon">⚙️</span>
+                </button>
+            </div>
+            <input type="file" id="promptImportFile" accept=".json" style="display: none;">
+        </div>
+    </div>
+
+    <!-- 添加/编辑提示词弹窗 -->
+    <div class="prompt-modal" id="promptModal">
+        <div class="prompt-modal-content">
+            <div class="prompt-modal-header">
+                <h3 id="promptModalTitle">新增提示词</h3>
+                <button class="prompt-close-btn" id="promptCloseModalBtn">&times;</button>
+            </div>
+            <div class="prompt-modal-body">
+                <form id="promptForm">
+                    <div class="prompt-form-group">
+                        <label for="promptName">提示词名称 <span class="prompt-required">*</span></label>
+                        <input type="text" id="promptName" placeholder="请输入提示词名称" required>
+                    </div>
+                    
+                    <div class="prompt-form-group">
+                        <label for="promptContent">提示词内容 <span class="prompt-required">*</span></label>
+                        <textarea id="promptContent" placeholder="请输入提示词内容" required></textarea>
+                    </div>
+                    
+                    <div class="prompt-form-group">
+                        <label for="promptCategory">分类</label>
+                        <input type="text" id="promptCategory" placeholder="请输入分类（可选）">
+                    </div>
+                    
+                    <div class="prompt-form-group">
+                        <label for="promptModel">推荐模型</label>
+                        <select id="promptModel">
+                            <!-- 模型选项将通过JS动态生成 -->
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="prompt-modal-footer">
+                <button type="button" class="prompt-btn prompt-btn-secondary" id="promptCancelBtn">取消</button>
+                <button type="submit" class="prompt-btn prompt-btn-primary" id="promptSaveBtn" form="promptForm">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI改写弹窗 -->
+    <div class="prompt-modal prompt-rewrite-modal" id="promptRewriteModal">
+        <div class="prompt-modal-content">
+            <div class="prompt-modal-header">
+                <h3>AI改写</h3>
+                <button class="prompt-close-btn" id="promptCloseRewriteBtn">&times;</button>
+            </div>
+            <div class="prompt-modal-body">
+                <div class="prompt-form-group">
+                    <label for="promptOriginalText">原始文案</label>
+                    <textarea id="promptOriginalText" placeholder="请输入需要改写的文案内容"></textarea>
+                </div>
+                
+                <div class="prompt-form-group">
+                    <label for="promptRewrittenText">改写结果</label>
+                    <textarea id="promptRewrittenText" placeholder="AI改写结果将显示在这里" readonly></textarea>
+                </div>
+                
+                <div class="prompt-loading" id="promptLoadingIndicator">
+                    <span class="prompt-spinner"></span>
+                    正在改写中...
+                </div>
+            </div>
+            <div class="prompt-modal-footer">
+                <button type="button" class="prompt-btn prompt-btn-secondary" id="promptCancelRewriteBtn">取消</button>
+                <button type="button" class="prompt-btn prompt-btn-primary" id="promptRewriteBtn">开始改写</button>
+                <button type="button" class="prompt-btn prompt-btn-success" id="promptCopyResultBtn" style="display: none;">复制结果</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 设置弹窗 -->
+    <div class="prompt-modal prompt-settings-modal" id="promptSettingsModal">
+        <div class="prompt-modal-content">
+            <div class="prompt-modal-header">
+                <h3>设置</h3>
+                <button class="prompt-close-btn" id="promptCloseSettingsBtn">&times;</button>
+            </div>
+            <div class="prompt-modal-body">
+                <div class="prompt-form-group">
+                    <label for="promptApiKey">API Key</label>
+                    <input type="password" id="promptApiKey" placeholder="请输入API Key">
+                </div>
+                
+                <div class="prompt-form-group">
+                    <label for="promptApiEndpoint">API端点</label>
+                    <input type="url" id="promptApiEndpoint" placeholder="请输入API端点URL">
+                </div>
+                
+                <div class="prompt-form-group">
+                    <label for="promptDefaultModel">默认模型</label>
+                    <select id="promptDefaultModel">
+                        <!-- 模型选项将通过JS动态生成 -->
+                    </select>
+                </div>
+            </div>
+            <div class="prompt-modal-footer">
+                <button type="button" class="prompt-btn prompt-btn-secondary" id="promptCancelSettingsBtn">取消</button>
+                <button type="button" class="prompt-btn prompt-btn-primary" id="promptSaveSettingsBtn">保存设置</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="components/api.js"></script>
+    <script src="components/modal.js"></script>
+    <script src="sidepanel.js"></script>
+</body>
+</html>

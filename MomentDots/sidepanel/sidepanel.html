@@ -84,9 +84,27 @@
 </head>
 <body>
   <div id="sidepanel-root" class="sidepanel-container bg-gray-50">
-    <!-- 加载中... -->
-    <div class="flex items-center justify-center h-full">
-      <p class="text-gray-500">加载中...</p>
+    <!-- 顶部导航栏 -->
+    <div class="flex bg-white border-b border-gray-200 p-2">
+      <button id="statusViewBtn" class="flex-1 px-3 py-2 text-sm font-medium rounded-md bg-blue-100 text-blue-700">
+        发布状态
+      </button>
+      <button id="promptViewBtn" class="flex-1 px-3 py-2 text-sm font-medium rounded-md text-gray-500 hover:text-gray-700 ml-2">
+        提示词助手
+      </button>
+    </div>
+
+    <!-- 发布状态视图 -->
+    <div id="statusView" class="flex-1 overflow-hidden">
+      <!-- 加载中... -->
+      <div class="flex items-center justify-center h-full">
+        <p class="text-gray-500">加载中...</p>
+      </div>
+    </div>
+
+    <!-- 提示词助手视图 -->
+    <div id="promptView" class="flex-1 overflow-hidden" style="display: none;">
+      <iframe id="promptFrame" src="../prompt/sidepanel.html" class="w-full h-full border-0"></iframe>
     </div>
   </div>
   
