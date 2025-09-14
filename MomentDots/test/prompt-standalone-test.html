@@ -156,10 +156,38 @@
         updateDebugInfo('Chrome API 模拟完成');
     </script>
 
-    <!-- 加载提示词助手脚本 -->
-    <script src="../prompt/components/api.js"></script>
-    <script src="../prompt/components/modal.js"></script>
-    <script src="../prompt/sidepanel.js"></script>
+    <!-- 延迟加载提示词助手脚本，确保Chrome API模拟完成 -->
+    <script>
+        // 延迟加载脚本
+        function loadPromptScripts() {
+            const scripts = [
+                '../prompt/components/api.js',
+                '../prompt/components/modal.js',
+                '../prompt/sidepanel.js'
+            ];
+
+            let loadedCount = 0;
+
+            scripts.forEach((src, index) => {
+                const script = document.createElement('script');
+                script.src = src;
+                script.onload = () => {
+                    loadedCount++;
+                    updateDebugInfo(`脚本 ${index + 1}/${scripts.length} 加载完成`);
+                    if (loadedCount === scripts.length) {
+                        updateDebugInfo('所有脚本加载完成');
+                    }
+                };
+                script.onerror = () => {
+                    updateDebugInfo(`脚本 ${src} 加载失败`);
+                };
+                document.head.appendChild(script);
+            });
+        }
+
+        // 在Chrome API模拟完成后加载脚本
+        setTimeout(loadPromptScripts, 100);
+    </script>
     
     <script>
         // 监听应用初始化

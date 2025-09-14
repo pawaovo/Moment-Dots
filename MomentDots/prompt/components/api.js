@@ -189,5 +189,16 @@ class PromptAIService {
     }
 }
 
-// 导出全局实例
-window.promptAIService = new PromptAIService();
+// 延迟创建全局实例，确保Chrome API可用
+window.promptAIService = null;
+
+// 创建实例的函数
+function createPromptAIService() {
+    if (!window.promptAIService) {
+        window.promptAIService = new PromptAIService();
+    }
+    return window.promptAIService;
+}
+
+// 导出创建函数
+window.createPromptAIService = createPromptAIService;

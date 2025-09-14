@@ -411,7 +411,24 @@ class PromptRewriteModalManager {
     }
 }
 
-// 创建全局实例
-window.promptModalManager = new PromptModalManager();
-window.promptFormModalManager = new PromptFormModalManager(window.promptModalManager);
-window.promptRewriteModalManager = new PromptRewriteModalManager(window.promptModalManager);
+// 延迟创建全局实例
+window.promptModalManager = null;
+window.promptFormModalManager = null;
+window.promptRewriteModalManager = null;
+
+// 创建实例的函数
+function createPromptModalManagers() {
+    if (!window.promptModalManager) {
+        window.promptModalManager = new PromptModalManager();
+        window.promptFormModalManager = new PromptFormModalManager(window.promptModalManager);
+        window.promptRewriteModalManager = new PromptRewriteModalManager(window.promptModalManager);
+    }
+    return {
+        modalManager: window.promptModalManager,
+        formModalManager: window.promptFormModalManager,
+        rewriteModalManager: window.promptRewriteModalManager
+    };
+}
+
+// 导出创建函数
+window.createPromptModalManagers = createPromptModalManagers;
