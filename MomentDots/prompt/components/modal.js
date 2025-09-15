@@ -8,6 +8,11 @@ class PromptModalManager {
     }
 
     init() {
+        // 防止重复绑定事件监听器
+        if (this.eventsInitialized) {
+            return;
+        }
+
         // 绑定所有弹窗的关闭事件
         document.addEventListener('click', (e) => {
             if (e.target.classList.contains('modal')) {
@@ -21,6 +26,9 @@ class PromptModalManager {
                 this.closeAllModals();
             }
         });
+
+        // 标记事件已初始化
+        this.eventsInitialized = true;
     }
 
     getModalElement(modalId) {

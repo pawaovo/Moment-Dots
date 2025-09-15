@@ -83,8 +83,8 @@ function switchToView(viewType) {
     elements.promptView.classList.add('hidden');
 
     // 更新按钮样式
-    elements.statusViewBtn.className = 'nav-button active';
-    elements.promptViewBtn.className = 'nav-button';
+    elements.statusViewBtn.className = 'flex-1 px-3 py-2 text-sm font-medium rounded-md bg-blue-100 text-blue-700';
+    elements.promptViewBtn.className = 'flex-1 px-3 py-2 text-sm font-medium rounded-md text-gray-500 hover:text-gray-700 ml-2';
 
     // 确保状态视图重新渲染
     setTimeout(() => {
@@ -96,8 +96,8 @@ function switchToView(viewType) {
     elements.promptView.classList.remove('hidden');
 
     // 更新按钮样式
-    elements.statusViewBtn.className = 'nav-button';
-    elements.promptViewBtn.className = 'nav-button active';
+    elements.statusViewBtn.className = 'flex-1 px-3 py-2 text-sm font-medium rounded-md text-gray-500 hover:text-gray-700';
+    elements.promptViewBtn.className = 'flex-1 px-3 py-2 text-sm font-medium rounded-md bg-blue-100 text-blue-700 ml-2';
   }
 }
 
@@ -298,7 +298,10 @@ function renderBottomActions() {
     <div class="flex-shrink-0 p-4 border-t border-gray-200 bg-white">
       <div class="flex justify-center">
         <button data-action="clear"
-                class="action-button px-8 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors text-sm font-medium">
+                class="action-button px-8 py-2 rounded-lg text-sm font-medium"
+                style="background: #4b5563; color: #fff; border: none; transition: background-color 0.2s;"
+                onmouseover="this.style.background='#374151'"
+                onmouseout="this.style.background='#4b5563'">
           清空记录
         </button>
       </div>
@@ -323,13 +326,18 @@ function formatTime(timestamp) {
 
 // 设置事件监听器 - 使用事件委托优化性能
 function setupEventListeners() {
-  // 移除旧的事件监听器
-  if (elements.root.eventListenerAdded) {
-    return; // 避免重复绑定
+  // 避免重复绑定事件监听器
+  if (elements.root?.eventListenerAdded) {
+    return;
+  }
+
+  if (!elements.root) {
+    console.warn('根元素不存在，无法绑定事件监听器');
+    return;
   }
 
   // 使用事件委托，只在根元素上绑定一次
-  elements.root.addEventListener('click', function(event) {
+  const clickHandler = function(event) {
     const target = event.target.closest('button');
     if (!target) return;
 
@@ -350,10 +358,13 @@ function setupEventListeners() {
       }
       return;
     }
-  });
+  };
+
+  elements.root.addEventListener('click', clickHandler);
 
   // 标记已添加事件监听器
   elements.root.eventListenerAdded = true;
+  console.log('事件监听器绑定完成');
 }
 
 // 设置消息监听
@@ -388,6 +399,9 @@ function setupMessageListeners() {
         break;
       case 'closeSidepanel':
         handleCloseSidepanel(message.data);
+        break;
+      case 'switchToPromptView':
+        switchToView('prompt');
         break;
       default:
         console.log('未知消息类型:', message.action);

@@ -2051,6 +2051,24 @@ function togglePlatform(platform) {
 const platformCache = new Map(SUPPORTED_PLATFORMS.map(p => [p.id, p]));
 
 /**
+ * 生成平台logo HTML（统一的logo渲染逻辑）
+ * @param {Object} platform - 平台对象
+ * @returns {string} - logo HTML字符串
+ */
+function generatePlatformLogoHTML(platform) {
+  return `
+    <img
+      src="${platform.logoUrl}"
+      alt="${platform.name} logo"
+      class="w-6 h-6 rounded-sm mr-3 platform-logo"
+      data-platform-id="${platform.id}"
+      onerror="handleLogoError(this, '${platform.id}')"
+    />
+    <div class="w-6 h-6 rounded-sm ${platform.color} mr-3" style="display: none;"></div>
+  `;
+}
+
+/**
  * 处理平台logo加载失败的情况
  * @param {HTMLImageElement} imgElement - 图片元素
  * @param {string} platformId - 平台ID
@@ -2752,6 +2770,24 @@ function showNotification(message, type = 'info') {
   }, 3000);
 }
 
+// 处理提示词助手按钮点击
+async function handleOpenPromptHelper() {
+  try {
+    // 打开侧边栏并切换到提示词助手视图
+    await chrome.sidePanel.open({ windowId: (await chrome.windows.getCurrent()).id });
+
+    // 发送消息到侧边栏，切换到提示词视图
+    chrome.runtime.sendMessage({
+      action: 'switchToPromptView'
+    });
+
+    showNotification('提示词助手已打开', 'success');
+  } catch (error) {
+    console.error('打开提示词助手失败:', error);
+    showNotification('打开提示词助手失败，请重试', 'error');
+  }
+}
+
 // 创建页面内容
 function createPageContent() {
   const root = document.getElementById('main-root');
@@ -2993,20 +3029,30 @@ function createPageContent() {
         <div class="space-y-6">
           <div class="bg-white rounded-lg border border-gray-200 shadow-sm">
             <div class="px-6 py-4 border-b border-gray-200">
-              <div class="flex items-center justify-between">
+              <div class="flex items-start justify-between">
                 <div>
                   <h2 class="text-lg font-medium text-gray-900">选择平台</h2>
                   <p class="mt-1 text-sm text-gray-500">选择要发布的社交媒体平台</p>
                 </div>
-                <button
-                  id="sync-button"
-                  class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <svg class="button-icon w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
-                  </svg>
-                  <span class="button-text">开始同步</span>
-                </button>
+                <div class="flex flex-col space-y-3 min-w-0 flex-shrink-0 ml-4">
+                  <!-- 提示词按钮 - 次级按钮 -->
+                  <button
+                    id="prompt-helper-btn"
+                    class="inline-flex items-center justify-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-gray-100 hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors whitespace-nowrap"
+                  >
+                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
+                    </svg>
+                    提示词
+                  </button>
+                  <!-- 开始同步按钮 - 主按钮，增大横向长度，删除图标，高度与提示词按钮一致 -->
+                  <button
+                    id="sync-button"
+                    class="inline-flex items-center justify-center px-6 py-2 border border-transparent text-base font-semibold rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm whitespace-nowrap min-w-[120px]"
+                  >
+                    <span class="button-text">开始同步</span>
+                  </button>
+                </div>
               </div>
             </div>
             <div class="p-6">
@@ -3020,14 +3066,7 @@ function createPageContent() {
                     />
                     <div class="ml-4 flex-1">
                       <div class="flex items-center">
-                        <img
-                          src="${platform.logoUrl}"
-                          alt="${platform.name} logo"
-                          class="w-4 h-4 rounded-sm mr-3 platform-logo"
-                          data-platform-id="${platform.id}"
-                          onerror="handleLogoError(this, '${platform.id}')"
-                        />
-                        <div class="w-4 h-4 rounded-sm ${platform.color} mr-3" style="display: none;"></div>
+                        ${generatePlatformLogoHTML(platform)}
                         <span class="text-sm font-medium text-gray-900">${platform.name}</span>
                       </div>
                     </div>
@@ -4276,14 +4315,7 @@ function renderPlatformList() {
       />
       <div class="ml-4 flex-1">
         <div class="flex items-center">
-          <img
-            src="${platform.logoUrl}"
-            alt="${platform.name} logo"
-            class="w-4 h-4 rounded-sm mr-3 platform-logo"
-            data-platform-id="${platform.id}"
-            onerror="handleLogoError(this, '${platform.id}')"
-          />
-          <div class="w-4 h-4 rounded-sm ${platform.color} mr-3" style="display: none;"></div>
+          ${generatePlatformLogoHTML(platform)}
           <span class="text-sm font-medium text-gray-900">${platform.name}</span>
         </div>
       </div>
@@ -4732,7 +4764,11 @@ function bindEventListeners() {
     syncButton.addEventListener('click', handleStartPublish);
   }
 
-
+  // 提示词助手按钮
+  const promptHelperBtn = domCache.get('prompt-helper-btn');
+  if (promptHelperBtn) {
+    promptHelperBtn.addEventListener('click', handleOpenPromptHelper);
+  }
 
   // 内容类型按钮切换
   const contentTypeButtons = document.querySelectorAll('.content-type-btn');

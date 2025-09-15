@@ -6,46 +6,30 @@
   <title>发布状态监控</title>
   <link href="../styles/output.css" rel="stylesheet">
   <style>
-    /* 彻底重置所有样式 */
     * {
-      margin: 0 !important;
-      padding: 0 !important;
-      box-sizing: border-box !important;
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
     }
 
     html, body {
-      width: 320px !important;
-      height: 100vh !important;
-      margin: 0 !important;
-      padding: 0 !important;
-      overflow: hidden !important;
-      box-sizing: border-box !important;
-    }
-
-    body {
-      background: #f9fafb !important;
+      width: 100%;
+      height: 100vh;
+      overflow: hidden;
     }
 
     .sidepanel-container {
-      width: 320px !important;
-      height: 100vh !important;
-      display: flex !important;
-      flex-direction: column !important;
-      margin: 0 !important;
-      padding: 0 !important;
-      box-sizing: border-box !important;
-      background: #f9fafb !important;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
     }
 
     /* 视图容器样式 */
     .view-container {
-      flex: 1 !important;
-      overflow: hidden !important;
-      position: relative !important;
-      width: 320px !important;
-      margin: 0 !important;
-      padding: 0 !important;
-      box-sizing: border-box !important;
+      flex: 1;
+      overflow: hidden;
+      position: relative;
     }
 
     .view-container.hidden {
@@ -112,93 +96,27 @@
       text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
     }
 
-    /* 顶部导航栏样式 */
-    .top-nav {
-      width: 320px !important;
-      height: 48px !important;
-      display: flex !important;
-      background: white !important;
-      border-bottom: 1px solid #e5e7eb !important;
-      margin: 0 !important;
-      padding: 8px !important;
-      box-sizing: border-box !important;
-    }
-
-    .nav-button {
-      flex: 1 !important;
-      height: 32px !important;
-      margin: 0 !important;
-      padding: 0 12px !important;
-      border: none !important;
-      border-radius: 6px !important;
-      font-size: 14px !important;
-      font-weight: 500 !important;
-      cursor: pointer !important;
-      box-sizing: border-box !important;
-      transition: all 0.2s !important;
-    }
-
-    .nav-button:first-child {
-      margin-right: 4px !important;
-    }
-
-    .nav-button:last-child {
-      margin-left: 4px !important;
-    }
-
-    .nav-button.active {
-      background: #dbeafe !important;
-      color: #1d4ed8 !important;
-    }
-
-    .nav-button:not(.active) {
-      background: transparent !important;
-      color: #6b7280 !important;
-    }
-
-    .nav-button:not(.active):hover {
-      background: #f3f4f6 !important;
-      color: #374151 !important;
-    }
-
     /* iframe样式优化 */
     #promptFrame {
-      width: 320px !important;
+      width: 100% !important;
       height: 100% !important;
       border: none !important;
       margin: 0 !important;
       padding: 0 !important;
-      overflow: hidden !important;
-      box-sizing: border-box !important;
-      display: block !important;
-      background: white !important;
-    }
-
-    /* 确保发布状态页面完全填充 */
-    #statusView {
-      width: 320px !important;
-      height: 100% !important;
-      margin: 0 !important;
-      padding: 0 !important;
-      box-sizing: border-box !important;
-      background: #f9fafb !important;
-    }
-
-    #statusView > * {
-      width: 100% !important;
-      margin: 0 !important;
-      box-sizing: border-box !important;
+      overflow: hidden;
+      display: block;
+      box-sizing: border-box;
     }
   </style>
 </head>
 <body>
-  <div id="sidepanel-root" class="sidepanel-container">
+  <div id="sidepanel-root" class="sidepanel-container bg-gray-50">
     <!-- 顶部导航栏 -->
-    <div class="top-nav">
-      <button id="statusViewBtn" class="nav-button active">
+    <div class="flex bg-white border-b border-gray-200 p-2">
+      <button id="statusViewBtn" class="flex-1 px-3 py-2 text-sm font-medium rounded-md bg-blue-100 text-blue-700">
         发布状态
       </button>
-      <button id="promptViewBtn" class="nav-button">
+      <button id="promptViewBtn" class="flex-1 px-3 py-2 text-sm font-medium rounded-md text-gray-500 hover:text-gray-700 ml-2">
         提示词助手
       </button>
     </div>
@@ -206,14 +124,14 @@
     <!-- 发布状态视图 -->
     <div id="statusView" class="view-container">
       <!-- 加载中... -->
-      <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #6b7280;">
-        <p>加载中...</p>
+      <div class="flex items-center justify-center h-full">
+        <p class="text-gray-500">加载中...</p>
       </div>
     </div>
 
     <!-- 提示词助手视图 -->
     <div id="promptView" class="view-container hidden">
-      <iframe id="promptFrame" src="../prompt/sidepanel.html"></iframe>
+      <iframe id="promptFrame" src="../prompt/sidepanel.html" class="w-full h-full border-0"></iframe>
     </div>
   </div>
   

@@ -165,14 +165,15 @@ class PromptApp {
         }
     }
 
-    async init() {
-        this.cacheElements();
-        await this.loadData();
-        this.bindEvents();
-        this.render();
-    }
+
 
     bindEvents() {
+        // 防止重复绑定事件
+        if (this.eventsbound) {
+            console.log('事件已绑定，跳过重复绑定');
+            return;
+        }
+
         // 确保modal管理器已初始化
         this.ensureModalManagersInitialized();
 
@@ -213,9 +214,18 @@ class PromptApp {
 
         // 绑定弹窗关闭按钮
         this.bindModalCloseEvents();
+
+        // 标记事件已绑定
+        this.eventsbound = true;
+        console.log('所有事件绑定完成');
     }
 
     bindModalCloseEvents() {
+        // 防止重复绑定模态框事件
+        if (this.modalEventsbound) {
+            return;
+        }
+
         // 确保modal管理器已初始化
         this.ensureModalManagersInitialized();
 
@@ -245,6 +255,9 @@ class PromptApp {
         modalEvents.forEach(({ element, action }) => {
             element?.addEventListener('click', action);
         });
+
+        // 标记模态框事件已绑定
+        this.modalEventsbound = true;
     }
 
     render() {

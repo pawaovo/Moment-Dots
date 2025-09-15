@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>主页面集成测试</title>
+    <link href="../styles/output.css" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            background-color: #f9fafb;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        }
+        
+        .main-container {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .content-area {
+            flex: 1;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+            width: 100%;
+        }
+        
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 400px;
+            gap: 2rem;
+            min-height: 600px;
+        }
+        
+        .test-notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 12px 20px;
+            border-radius: 8px;
+            color: white;
+            font-weight: 500;
+            z-index: 1000;
+            transform: translateX(100%);
+            transition: transform 0.3s ease;
+        }
+        
+        .test-notification.show {
+            transform: translateX(0);
+        }
+        
+        .test-notification.success {
+            background: #10b981;
+        }
+        
+        .test-notification.error {
+            background: #ef4444;
+        }
+        
+        .test-notification.info {
+            background: #3b82f6;
+        }
+        
+        .test-status {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 6px;
+            font-size: 14px;
+            z-index: 1000;
+        }
+        
+        .demo-sidepanel {
+            position: fixed;
+            top: 0;
+            right: -400px;
+            width: 400px;
+            height: 100vh;
+            background: white;
+            box-shadow: -2px 0 10px rgba(0, 0, 0, 0.1);
+            transition: right 0.3s ease;
+            z-index: 999;
+        }
+        
+        .demo-sidepanel.open {
+            right: 0;
+        }
+        
+        .demo-sidepanel iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+        
+        .demo-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 998;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+        }
+        
+        .demo-overlay.show {
+            opacity: 1;
+            visibility: visible;
+        }
+        
+        .close-sidepanel {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: #ef4444;
+            color: white;
+            border: none;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 16px;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <!-- Header -->
+        <header class="bg-white border-b border-gray-200 shadow-sm">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex items-center justify-between h-16">
+                    <div class="flex items-center">
+                        <div class="flex-shrink-0">
+                            <h1 class="text-xl font-semibold text-gray-900">动态发布助手</h1>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="content-area">
+            <div class="form-grid">
+                <!-- Content Form -->
+                <div class="space-y-6">
+                    <!-- Content Card -->
+                    <div class="bg-white rounded-lg border border-gray-200 shadow-sm">
+                        <div class="px-6 py-4 border-b border-gray-200">
+                            <div class="flex items-center space-x-3">
+                                <button class="px-4 py-2 text-sm font-medium text-blue-700 bg-blue-100 rounded-md">动态</button>
+                                <button class="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 rounded-md">文章</button>
+                                <button class="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 rounded-md">短视频</button>
+                            </div>
+                            <p class="mt-3 text-sm text-gray-500">填写要发布的动态内容</p>
+                        </div>
+                        <div class="p-6 space-y-6">
+                            <!-- Title Input -->
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                    标题 <span class="text-gray-400">(可选)</span>
+                                </label>
+                                <input type="text" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="输入动态标题...">
+                            </div>
+                            
+                            <!-- Content Input -->
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">内容</label>
+                                <textarea rows="6" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="分享你的想法..."></textarea>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Platform Selection -->
+                <div class="space-y-6">
+                    <div class="bg-white rounded-lg border border-gray-200 shadow-sm">
+                        <div class="px-6 py-4 border-b border-gray-200">
+                            <div class="flex items-start justify-between">
+                                <div>
+                                    <h3 class="text-lg font-medium text-gray-900">选择平台</h3>
+                                    <p class="mt-1 text-sm text-gray-500">选择要发布的社交媒体平台</p>
+                                </div>
+                                <div class="flex flex-col space-y-3 min-w-0 flex-shrink-0 ml-4">
+                                    <!-- 提示词按钮 - 次级按钮 -->
+                                    <button id="prompt-helper-btn" class="inline-flex items-center justify-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-gray-100 hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors whitespace-nowrap">
+                                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
+                                        </svg>
+                                        提示词
+                                    </button>
+                                    <!-- 开始同步按钮 - 主按钮，增大横向长度，删除图标，高度与提示词按钮一致 -->
+                                    <button class="inline-flex items-center justify-center px-6 py-2 border border-transparent text-base font-semibold rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors shadow-sm whitespace-nowrap min-w-[120px]">
+                                        开始同步
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="p-6">
+                            <div class="space-y-4">
+                                <div class="flex items-center p-4 border border-gray-200 rounded-lg hover:border-blue-300 transition-colors cursor-pointer">
+                                    <input type="checkbox" class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 focus:ring-2">
+                                    <div class="ml-4 flex-1">
+                                        <div class="flex items-center">
+                                            <div class="w-4 h-4 bg-red-500 rounded-sm mr-3"></div>
+                                            <span class="text-sm font-medium text-gray-900">微博</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="flex items-center p-4 border border-gray-200 rounded-lg hover:border-blue-300 transition-colors cursor-pointer">
+                                    <input type="checkbox" class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 focus:ring-2">
+                                    <div class="ml-4 flex-1">
+                                        <div class="flex items-center">
+                                            <div class="w-4 h-4 bg-red-500 rounded-sm mr-3"></div>
+                                            <span class="text-sm font-medium text-gray-900">小红书</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="flex items-center p-4 border border-gray-200 rounded-lg hover:border-blue-300 transition-colors cursor-pointer">
+                                    <input type="checkbox" class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 focus:ring-2">
+                                    <div class="ml-4 flex-1">
+                                        <div class="flex items-center">
+                                            <div class="w-4 h-4 bg-yellow-500 rounded-sm mr-3"></div>
+                                            <span class="text-sm font-medium text-gray-900">即刻</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+    
+    <!-- 模拟侧边栏 -->
+    <div class="demo-overlay" id="demoOverlay"></div>
+    <div class="demo-sidepanel" id="demoSidepanel">
+        <button class="close-sidepanel" onclick="closeSidepanel()">&times;</button>
+        <iframe src="../sidepanel/sidepanel.html" id="sidepanelFrame"></iframe>
+    </div>
+    
+    <!-- 测试状态 -->
+    <div class="test-status" id="testStatus">准备就绪</div>
+
+    <script>
+        // 模拟Chrome扩展API
+        if (typeof chrome === 'undefined') {
+            window.chrome = {
+                sidePanel: {
+                    open: function(options) {
+                        return new Promise((resolve) => {
+                            console.log('模拟打开侧边栏:', options);
+                            openSidepanel();
+                            resolve();
+                        });
+                    }
+                },
+                runtime: {
+                    sendMessage: function(message) {
+                        return new Promise((resolve) => {
+                            console.log('模拟发送消息:', message);
+                            if (message.action === 'switchToPromptView') {
+                                switchToPromptView();
+                            }
+                            resolve();
+                        });
+                    }
+                },
+                windows: {
+                    getCurrent: function() {
+                        return new Promise((resolve) => {
+                            resolve({ id: 1 });
+                        });
+                    }
+                }
+            };
+        }
+
+        // 通知系统
+        function showNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.className = `test-notification ${type}`;
+            notification.textContent = message;
+            document.body.appendChild(notification);
+            
+            setTimeout(() => notification.classList.add('show'), 100);
+            
+            setTimeout(() => {
+                notification.classList.remove('show');
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        notification.parentNode.removeChild(notification);
+                    }
+                }, 300);
+            }, 3000);
+        }
+
+        // 更新测试状态
+        function updateTestStatus(message) {
+            document.getElementById('testStatus').textContent = message;
+        }
+
+        // 打开侧边栏
+        function openSidepanel() {
+            document.getElementById('demoOverlay').classList.add('show');
+            document.getElementById('demoSidepanel').classList.add('open');
+            updateTestStatus('侧边栏已打开');
+        }
+
+        // 关闭侧边栏
+        function closeSidepanel() {
+            document.getElementById('demoOverlay').classList.remove('show');
+            document.getElementById('demoSidepanel').classList.remove('open');
+            updateTestStatus('侧边栏已关闭');
+        }
+
+        // 切换到提示词视图
+        function switchToPromptView() {
+            const frame = document.getElementById('sidepanelFrame');
+            frame.src = '../prompt/sidepanel.html';
+            updateTestStatus('已切换到提示词助手视图');
+        }
+
+        // 处理提示词助手按钮点击
+        async function handleOpenPromptHelper() {
+            try {
+                updateTestStatus('正在打开提示词助手...');
+                
+                await chrome.sidePanel.open({ windowId: (await chrome.windows.getCurrent()).id });
+                
+                await chrome.runtime.sendMessage({
+                    action: 'switchToPromptView'
+                });
+                
+                showNotification('提示词助手已打开', 'success');
+                updateTestStatus('提示词助手已成功打开');
+            } catch (error) {
+                console.error('打开提示词助手失败:', error);
+                showNotification('打开提示词助手失败，请重试', 'error');
+                updateTestStatus('打开失败: ' + error.message);
+            }
+        }
+
+        // 绑定事件监听器
+        document.addEventListener('DOMContentLoaded', function() {
+            const promptHelperBtn = document.getElementById('prompt-helper-btn');
+            if (promptHelperBtn) {
+                promptHelperBtn.addEventListener('click', handleOpenPromptHelper);
+            }
+            
+            // 点击遮罩关闭侧边栏
+            document.getElementById('demoOverlay').addEventListener('click', closeSidepanel);
+            
+            updateTestStatus('页面加载完成，功能已就绪');
+            showNotification('主页面集成测试已准备就绪', 'info');
+        });
+    </script>
+</body>
+</html>

@@ -3,18 +3,28 @@
 class PromptAIService {
     constructor() {
         this.settings = null;
+        this.settingsLoaded = false;
         this.loadSettings();
     }
 
     async loadSettings() {
+        // 避免重复加载设置
+        if (this.settingsLoaded) {
+            return this.settings;
+        }
+
         try {
             const data = await chrome.storage.local.get(['promptSettings']);
             this.settings = data.promptSettings || this.getDefaultSettings();
+            this.settingsLoaded = true;
         } catch (error) {
             // 如果Chrome storage不可用（如测试环境），使用默认设置
             console.warn('Chrome storage不可用，使用默认设置:', error);
             this.settings = this.getDefaultSettings();
+            this.settingsLoaded = true;
         }
+
+        return this.settings;
     }
 
     getDefaultSettings() {
@@ -36,17 +46,21 @@ class PromptAIService {
         await chrome.storage.local.set({ promptSettings: this.settings });
     }
 
-    getModel(modelId) {
-        // 确保settings已初始化
-        if (!this.settings) {
-            this.settings = this.getDefaultSettings();
+    async getModel(modelId) {
+        // 确保settings已加载
+        if (!this.settingsLoaded) {
+            await this.loadSettings();
         }
         return this.settings.models.find(model => model.id === modelId) || this.settings.models[0];
     }
 
     async rewriteText(originalText, promptContent, modelId = null) {
         try {
-            const model = this.getModel(modelId || this.settings.defaultModel);
+            // 确保设置已加载
+            if (!this.settingsLoaded) {
+                await this.loadSettings();
+            }
+            const model = await this.getModel(modelId || this.settings.defaultModel);
 
             if (!model.apiKey) {
                 throw new Error('API Key 未配置，请在设置中配置 API Key');
