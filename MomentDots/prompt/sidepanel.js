@@ -48,6 +48,9 @@ class PromptApp {
         // 统一的存储键名 - 使用前缀避免冲突
         this.STORAGE_KEYS = ['promptCategories', 'promptPrompts', 'promptSettings'];
 
+        // 设置全局引用，便于外部访问
+        window.promptManager = this;
+
         this.init();
     }
 
@@ -317,10 +320,24 @@ class PromptApp {
     createPromptCard(prompt) {
         const card = document.createElement('div');
         card.className = 'prompt-card';
+        card.dataset.promptId = prompt.id;
 
         const preview = prompt.content.length > 100
             ? prompt.content.substring(0, 100) + '...'
             : prompt.content;
+
+        // 检查是否有当前操作的平台
+        const hasCurrentPlatform = window.currentPromptPlatformId;
+        const platformName = window.currentPromptPlatformName || '平台';
+
+        // 检查该提示词是否已被当前平台选中（异步检查，先设为false）
+        let isSelected = false;
+
+        // 设置卡片的选中状态样式
+        if (hasCurrentPlatform && isSelected) {
+            card.classList.add('prompt-card-selected');
+            card.dataset.platformId = window.currentPromptPlatformId;
+        }
 
         card.innerHTML = `
             <div class="prompt-card-content">
@@ -330,22 +347,52 @@ class PromptApp {
                     <span class="prompt-card-category">${prompt.category || '未分类'}</span>
                     <span>${prompt.model || '默认模型'}</span>
                 </div>
+                ${hasCurrentPlatform ? `
+                    <div class="prompt-platform-info">
+                        <span class="text-xs ${isSelected ? 'text-green-600' : 'text-blue-600'}">
+                            ${isSelected ? `已添加到 ${platformName}，点击移除` : `点击添加到 ${platformName}`}
+                        </span>
+                    </div>
+                ` : ''}
             </div>
             <div class="prompt-card-actions">
-                <button class="prompt-action-btn primary" data-action="rewrite">改写</button>
+                ${hasCurrentPlatform ? '' : `
+                    <button class="prompt-action-btn primary" data-action="rewrite">改写</button>
+                `}
                 <button class="prompt-action-btn secondary" data-action="edit">编辑</button>
                 <button class="prompt-action-btn danger" data-action="delete">删除</button>
             </div>
         `;
 
-        // 绑定操作按钮事件
+        // 绑定事件
         card.addEventListener('click', (e) => {
-            const action = e.target.dataset.action;
+            const action = e.target.dataset.action || e.target.closest('[data-action]')?.dataset.action;
             if (action) {
                 e.stopPropagation();
                 this.handlePromptAction(action, prompt);
+            } else if (hasCurrentPlatform) {
+                // 如果有当前平台且点击的不是操作按钮，则切换选择状态
+                e.stopPropagation();
+                this.togglePromptSelection(prompt);
             }
         });
+
+        // 异步检查选中状态并更新UI
+        if (hasCurrentPlatform) {
+            this.isPromptSelectedForPlatform(prompt.name).then(isActuallySelected => {
+                if (isActuallySelected) {
+                    card.classList.add('prompt-card-selected');
+                    card.dataset.platformId = window.currentPromptPlatformId;
+
+                    // 更新提示信息
+                    const platformInfo = card.querySelector('.prompt-platform-info span');
+                    if (platformInfo) {
+                        platformInfo.textContent = `已添加到 ${platformName}，点击移除`;
+                        platformInfo.className = 'text-xs text-green-600';
+                    }
+                }
+            });
+        }
 
         return card;
     }
@@ -355,6 +402,9 @@ class PromptApp {
         this.ensureModalManagersInitialized();
 
         switch (action) {
+            case 'addToPlatform':
+                this.addPromptToPlatform(prompt);
+                break;
             case 'rewrite':
                 if (window.promptRewriteModalManager) {
                     window.promptRewriteModalManager.openRewriteModal(prompt);
@@ -372,6 +422,166 @@ class PromptApp {
             case 'delete':
                 this.deletePrompt(prompt.id);
                 break;
+        }
+    }
+
+    // 检查提示词是否已被当前平台选中
+    async isPromptSelectedForPlatform(promptName) {
+        const platformId = window.currentPromptPlatformId;
+        if (!platformId) return false;
+
+        try {
+            // 从chrome.storage获取平台配置信息
+            const result = await chrome.storage.local.get(['platformPromptConfig']);
+            const platformPromptConfig = result.platformPromptConfig || {};
+            const config = platformPromptConfig[platformId] || { availablePrompts: [] };
+
+            return config.availablePrompts.includes(promptName);
+        } catch (error) {
+            console.error('检查提示词选中状态失败:', error);
+            return false;
+        }
+    }
+
+    // 切换提示词选择状态
+    togglePromptSelection(prompt) {
+        const platformId = window.currentPromptPlatformId;
+        const platformName = window.currentPromptPlatformName;
+
+        if (!platformId) {
+            PromptToastManager.show('未指定目标平台', 'error');
+            return;
+        }
+
+        // 获取卡片元素
+        const cardElement = document.querySelector(`.prompt-card[data-prompt-id="${prompt.id}"]`);
+        if (!cardElement) return;
+
+        const isSelected = cardElement.classList.contains('prompt-card-selected');
+
+        if (isSelected) {
+            // 取消选择
+            cardElement.classList.remove('prompt-card-selected');
+            cardElement.removeAttribute('data-platform-id');
+            this.removePromptFromPlatform(prompt);
+        } else {
+            // 选择提示词
+            cardElement.classList.add('prompt-card-selected');
+            cardElement.dataset.platformId = platformId;
+            this.addPromptToPlatform(prompt);
+        }
+
+        // 更新卡片内的提示信息
+        const platformInfo = cardElement.querySelector('.prompt-platform-info span');
+        if (platformInfo) {
+            if (isSelected) {
+                platformInfo.textContent = `点击添加到 ${platformName}`;
+                platformInfo.className = 'text-xs text-blue-600';
+            } else {
+                platformInfo.textContent = `已添加到 ${platformName}，点击移除`;
+                platformInfo.className = 'text-xs text-green-600';
+            }
+        }
+    }
+
+    // 添加提示词到平台
+    addPromptToPlatform(prompt) {
+        const platformId = window.currentPromptPlatformId;
+        const platformName = window.currentPromptPlatformName;
+
+        if (!platformId) {
+            PromptToastManager.show('未指定目标平台', 'error');
+            return;
+        }
+
+        try {
+            // 发送消息到主页面
+            chrome.runtime.sendMessage({
+                action: 'addPromptToPlatform',
+                platformId: platformId,
+                promptName: prompt.name
+            }, (response) => {
+                if (response && response.success) {
+                    PromptToastManager.show(`已添加"${prompt.name}"到${platformName}`, 'success');
+                } else {
+                    PromptToastManager.show(response?.error || '添加失败', 'error');
+                    // 添加失败时恢复卡片状态
+                    const cardElement = document.querySelector(`.prompt-card[data-prompt-id="${prompt.id}"]`);
+                    if (cardElement) {
+                        cardElement.classList.remove('prompt-card-selected');
+                        cardElement.removeAttribute('data-platform-id');
+                        // 更新提示信息
+                        const platformInfo = cardElement.querySelector('.prompt-platform-info span');
+                        if (platformInfo) {
+                            platformInfo.textContent = `点击添加到 ${platformName}`;
+                            platformInfo.className = 'text-xs text-blue-600';
+                        }
+                    }
+                }
+            });
+        } catch (error) {
+            console.error('发送消息失败:', error);
+            PromptToastManager.show('添加失败，请重试', 'error');
+            // 添加失败时恢复卡片状态
+            const cardElement = document.querySelector(`.prompt-card[data-prompt-id="${prompt.id}"]`);
+            if (cardElement) {
+                cardElement.classList.remove('prompt-card-selected');
+                cardElement.removeAttribute('data-platform-id');
+                // 更新提示信息
+                const platformInfo = cardElement.querySelector('.prompt-platform-info span');
+                if (platformInfo) {
+                    platformInfo.textContent = `点击添加到 ${platformName}`;
+                    platformInfo.className = 'text-xs text-blue-600';
+                }
+            }
+        }
+    }
+
+    // 从平台移除提示词
+    removePromptFromPlatform(prompt) {
+        const platformId = window.currentPromptPlatformId;
+        const platformName = window.currentPromptPlatformName;
+
+        try {
+            // 发送消息到主页面
+            chrome.runtime.sendMessage({
+                action: 'removePromptFromPlatform',
+                platformId: platformId,
+                promptName: prompt.name
+            }, (response) => {
+                if (response && response.success) {
+                    PromptToastManager.show(`已从${platformName}移除"${prompt.name}"`, 'success');
+                } else {
+                    PromptToastManager.show(response?.error || '移除失败', 'error');
+                    // 移除失败时恢复卡片状态
+                    const cardElement = document.querySelector(`.prompt-card[data-prompt-id="${prompt.id}"]`);
+                    if (cardElement) {
+                        cardElement.classList.add('prompt-card-selected');
+                        cardElement.dataset.platformId = platformId;
+                        // 更新提示信息
+                        const platformInfo = cardElement.querySelector('.prompt-platform-info span');
+                        if (platformInfo) {
+                            platformInfo.textContent = `已添加到 ${platformName}，点击移除`;
+                            platformInfo.className = 'text-xs text-green-600';
+                        }
+                    }
+                }
+            });
+        } catch (error) {
+            console.error('发送消息失败:', error);
+            PromptToastManager.show('移除失败，请重试', 'error');
+            // 移除失败时恢复卡片状态
+            const cardElement = document.querySelector(`.prompt-card[data-prompt-id="${prompt.id}"]`);
+            if (cardElement) {
+                cardElement.classList.add('prompt-card-selected');
+                cardElement.dataset.platformId = platformId;
+                // 更新提示信息
+                const platformInfo = cardElement.querySelector('.prompt-platform-info span');
+                if (platformInfo) {
+                    platformInfo.textContent = `已添加到 ${platformName}，点击移除`;
+                    platformInfo.className = 'text-xs text-green-600';
+                }
+            }
         }
     }
 
@@ -595,6 +805,20 @@ function initializePromptApp() {
         }, 300);
     }
 }
+
+// 监听来自父页面的消息
+window.addEventListener('message', (event) => {
+    if (event.data.action === 'platformChanged') {
+        window.currentPromptPlatformId = event.data.platformId;
+        window.currentPromptPlatformName = event.data.platformName;
+        console.log('提示词助手接收到平台信息:', event.data.platformId, event.data.platformName);
+
+        // 重新渲染提示词列表以显示勾选按钮
+        if (window.promptManager) {
+            window.promptManager.render();
+        }
+    }
+});
 
 // 等待DOM加载完成后初始化
 if (document.readyState === 'loading') {

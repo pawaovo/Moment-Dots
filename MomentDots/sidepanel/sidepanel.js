@@ -6,7 +6,8 @@ let sidepanelState = {
   publishResults: [],
   isPublishing: false,
   lastUpdate: null,
-  currentView: 'status' // 'status' 或 'prompt'
+  currentView: 'status', // 'status' 或 'prompt'
+  pendingPromptSwitch: false // 标记是否有待处理的提示词视图切换
 };
 
 // DOM 元素引用
@@ -40,11 +41,20 @@ async function initializeSidepanel() {
     // 加载保存的状态
     await loadSavedState();
 
+    // 设置消息监听（在渲染之前设置，以便能接收早期消息）
+    setupMessageListeners();
+
     // 渲染初始界面
     renderSidepanel();
 
-    // 设置消息监听
-    setupMessageListeners();
+    // 检查是否有待处理的提示词视图切换
+    if (sidepanelState.pendingPromptSwitch) {
+      console.log('检测到待处理的提示词视图切换，立即切换到提示词视图');
+      setTimeout(() => {
+        switchToView('prompt');
+        sidepanelState.pendingPromptSwitch = false;
+      }, 100);
+    }
 
     // 设置定时更新
     setupPeriodicUpdate();
@@ -244,7 +254,7 @@ function generatePlatformIcon(platform) {
 function calculatePublishStats() {
   const totalPlatforms = sidepanelState.publishResults.length;
 
-  // 统计成功发布的平台数量（状态为 ready 或 success）
+  // 统计成功发布的平台数量（状态为 ready 或 success，不包括优化中的平台）
   const successfulPlatforms = sidepanelState.publishResults.filter(result =>
     result.status === 'ready' || result.status === 'success'
   ).length;
@@ -255,13 +265,19 @@ function calculatePublishStats() {
   };
 }
 
-// 获取状态配置 - 简化为三种状态
+// 获取状态配置 - 包含优化状态
 function getStatusConfig(status) {
   // 定义基础配置模板
   const publishingConfig = {
     text: '发布中',
     textColor: 'text-blue-600',
     icon: '<div class="w-2 h-2 bg-blue-600 rounded-full status-publishing"></div>'
+  };
+
+  const optimizingConfig = {
+    text: '优化中',
+    textColor: 'text-purple-600',
+    icon: '<div class="w-2 h-2 bg-purple-600 rounded-full status-optimizing"></div>'
   };
 
   const readyConfig = {
@@ -280,6 +296,7 @@ function getStatusConfig(status) {
   const statusMap = {
     pending: publishingConfig,
     publishing: publishingConfig,
+    optimizing: optimizingConfig,
     ready: readyConfig,
     success: readyConfig,
     failed: failedConfig
@@ -401,7 +418,33 @@ function setupMessageListeners() {
         handleCloseSidepanel(message.data);
         break;
       case 'switchToPromptView':
+        console.log('收到switchToPromptView消息，立即切换到提示词视图');
+        sidepanelState.pendingPromptSwitch = true;
         switchToView('prompt');
+        // 如果有平台信息，保存当前操作的平台
+        if (message.platformId) {
+          window.currentPromptPlatformId = message.platformId;
+          window.currentPromptPlatformName = message.platformName;
+          console.log('设置当前操作平台:', message.platformId, message.platformName);
+
+          // 通知提示词助手页面重新渲染
+          setTimeout(() => {
+            const promptFrame = document.querySelector('iframe[src*="prompt/sidepanel.html"]');
+            if (promptFrame && promptFrame.contentWindow) {
+              promptFrame.contentWindow.postMessage({
+                action: 'platformChanged',
+                platformId: message.platformId,
+                platformName: message.platformName
+              }, '*');
+            }
+          }, 100);
+        }
+        break;
+      case 'updatePlatformOptimizationStatus':
+        handlePlatformOptimizationStatusUpdate(message);
+        break;
+      case 'publishStateReset':
+        handlePublishStateReset(message.data);
         break;
       default:
         console.log('未知消息类型:', message.action);
@@ -467,6 +510,85 @@ function handlePageRefreshed(data) {
   }
 }
 
+// 处理发布状态重置 - 优化版本
+function handlePublishStateReset(data) {
+  console.log('🔄 侧边栏收到发布状态重置:', data.reason);
+
+  // 批量更新状态，减少重复操作
+  Object.assign(sidepanelState, {
+    publishResults: [],
+    isPublishing: false,
+    lastUpdate: new Date()
+  });
+
+  // 重新渲染界面
+  renderSidepanel();
+
+  // 只在有选择平台时才输出详细日志
+  if (data.selectedPlatforms?.length > 0) {
+    console.log(`✅ 侧边栏状态已重置，当前选择平台:`, data.selectedPlatforms);
+  }
+}
+
+// 处理平台优化状态更新
+function handlePlatformOptimizationStatusUpdate(message) {
+  console.log('收到平台优化状态更新:', message);
+
+  // 查找对应的发布结果并更新状态
+  const platformId = message.platformId;
+  const existingIndex = sidepanelState.publishResults.findIndex(
+    r => {
+      if (!r || !r.platform) return false;
+      const existingPlatformId = typeof r.platform === 'string' ? r.platform : r.platform?.id;
+      return existingPlatformId === platformId;
+    }
+  );
+
+  if (existingIndex >= 0) {
+    // 更新现有结果
+    sidepanelState.publishResults[existingIndex] = {
+      ...sidepanelState.publishResults[existingIndex],
+      status: message.status,
+      message: message.message,
+      timestamp: message.timestamp,
+      isOptimizing: message.status === 'optimizing'
+    };
+  } else {
+    // 创建新的结果条目
+    sidepanelState.publishResults.push({
+      platform: { id: platformId, name: getPlatformNameById(platformId) },
+      status: message.status,
+      message: message.message,
+      timestamp: message.timestamp,
+      isOptimizing: message.status === 'optimizing'
+    });
+  }
+
+  sidepanelState.lastUpdate = new Date();
+  renderSidepanel();
+}
+
+// 根据平台ID获取平台名称 - 使用统一的PlatformUtils
+function getPlatformNameById(platformId) {
+  // 如果PlatformUtils可用，使用统一工具
+  if (typeof PlatformUtils !== 'undefined' && PlatformUtils.getPlatformNameById) {
+    return PlatformUtils.getPlatformNameById(platformId);
+  }
+
+  // 降级到本地实现（保持兼容性）
+  const platformNames = {
+    'weibo': '微博',
+    'xiaohongshu': '小红书',
+    'douyin': '抖音',
+    'jike': '即刻',
+    'bilibili': 'B站',
+    'weixinchannels': '微信视频号',
+    'weixin': '微信公众号',
+    'weixin-article': '微信公众号(文章)'
+  };
+  return platformNames[platformId] || platformId;
+}
+
 // 处理关闭侧边栏事件
 function handleCloseSidepanel(data) {
   console.log('收到关闭侧边栏事件:', data);
@@ -516,16 +638,44 @@ function closeSidepanelUI() {
   }
 }
 
-// 设置定时更新
+// 设置智能定时更新 - 优化更新频率
 function setupPeriodicUpdate() {
-  setInterval(async () => {
+  let updateInterval = 5000; // 默认5秒
+  let lastActivityTime = Date.now();
+
+  // 监听用户活动，调整更新频率
+  const updateActivity = () => {
+    lastActivityTime = Date.now();
+    updateInterval = 2000; // 活跃时2秒更新
+  };
+
+  // 监听用户交互
+  document.addEventListener('click', updateActivity);
+  document.addEventListener('scroll', updateActivity);
+
+  const updateFunction = async () => {
     try {
-      await loadSavedState();
-      renderSidepanel();
+      // 如果长时间无活动，降低更新频率
+      const timeSinceActivity = Date.now() - lastActivityTime;
+      if (timeSinceActivity > 30000) { // 30秒无活动
+        updateInterval = 10000; // 降低到10秒更新
+      }
+
+      // 只在有发布任务时才更新
+      if (sidepanelState.isPublishing || sidepanelState.publishResults.length > 0) {
+        await loadSavedState();
+        renderSidepanel();
+      }
     } catch (error) {
       console.error('定时更新失败:', error);
     }
-  }, 5000); // 每5秒更新一次
+
+    // 设置下次更新
+    setTimeout(updateFunction, updateInterval);
+  };
+
+  // 启动更新循环
+  setTimeout(updateFunction, updateInterval);
 }
 
 // 内部函数 - 事件处理

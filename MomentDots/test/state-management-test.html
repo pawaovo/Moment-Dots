@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>状态管理测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-button {
+            background: #007cba;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .test-button:hover {
+            background: #005a87;
+        }
+        .result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        .config-display {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 状态管理测试页面</h1>
+    <p>测试提示词配置状态恢复和侧边栏状态清理功能</p>
+
+    <!-- 提示词配置测试 -->
+    <div class="test-section">
+        <h2>📝 提示词配置状态测试</h2>
+        
+        <div>
+            <button class="test-button" onclick="testPromptConfigSave()">保存测试配置</button>
+            <button class="test-button" onclick="testPromptConfigLoad()">加载配置状态</button>
+            <button class="test-button" onclick="testPromptConfigClear()">清除配置</button>
+        </div>
+        
+        <div id="promptConfigResults"></div>
+        <div id="promptConfigDisplay" class="config-display"></div>
+    </div>
+
+    <!-- 侧边栏状态测试 -->
+    <div class="test-section">
+        <h2>📊 侧边栏状态管理测试</h2>
+        
+        <div>
+            <button class="test-button" onclick="testCreatePublishResults()">创建测试发布状态</button>
+            <button class="test-button" onclick="testLoadPublishResults()">加载发布状态</button>
+            <button class="test-button" onclick="testClearPublishResults()">清理发布状态</button>
+            <button class="test-button" onclick="testResetPublishState()">重置发布状态</button>
+        </div>
+        
+        <div id="publishStateResults"></div>
+        <div id="publishStateDisplay" class="config-display"></div>
+    </div>
+
+    <!-- 综合测试 -->
+    <div class="test-section">
+        <h2>🔄 综合状态测试</h2>
+        
+        <div>
+            <button class="test-button" onclick="testFullWorkflow()">完整工作流程测试</button>
+            <button class="test-button" onclick="testPageRefreshScenario()">页面刷新场景测试</button>
+        </div>
+        
+        <div id="workflowResults"></div>
+    </div>
+
+    <script>
+        // 测试提示词配置保存
+        async function testPromptConfigSave() {
+            const results = [];
+            const resultDiv = document.getElementById('promptConfigResults');
+            
+            try {
+                // 创建测试配置
+                const testConfig = {
+                    'weibo': {
+                        selectedPrompt: '微信表情包提示词',
+                        isEnabled: true,
+                        availablePrompts: ['微信表情包提示词', '论文大师提示词']
+                    },
+                    'xiaohongshu': {
+                        selectedPrompt: '论文大师提示词',
+                        isEnabled: true,
+                        availablePrompts: ['微信表情包提示词', '论文大师提示词']
+                    }
+                };
+
+                await chrome.storage.local.set({ platformPromptConfig: testConfig });
+                results.push({ type: 'success', message: '✅ 提示词配置已保存' });
+                
+                // 显示配置
+                document.getElementById('promptConfigDisplay').textContent = JSON.stringify(testConfig, null, 2);
+                
+            } catch (error) {
+                results.push({ type: 'error', message: `❌ 保存失败: ${error.message}` });
+            }
+            
+            displayResults(resultDiv, results);
+        }
+
+        // 测试提示词配置加载
+        async function testPromptConfigLoad() {
+            const results = [];
+            const resultDiv = document.getElementById('promptConfigResults');
+            
+            try {
+                const result = await chrome.storage.local.get(['platformPromptConfig']);
+                const config = result.platformPromptConfig || {};
+                
+                results.push({ type: 'info', message: `📖 加载配置成功，包含 ${Object.keys(config).length} 个平台` });
+                
+                // 显示配置
+                document.getElementById('promptConfigDisplay').textContent = JSON.stringify(config, null, 2);
+                
+                // 验证配置结构
+                for (const [platformId, platformConfig] of Object.entries(config)) {
+                    if (platformConfig.selectedPrompt) {
+                        results.push({ 
+                            type: 'success', 
+                            message: `✅ ${platformId}: ${platformConfig.selectedPrompt} (${platformConfig.isEnabled ? '已启用' : '未启用'})` 
+                        });
+                    }
+                }
+                
+            } catch (error) {
+                results.push({ type: 'error', message: `❌ 加载失败: ${error.message}` });
+            }
+            
+            displayResults(resultDiv, results);
+        }
+
+        // 测试提示词配置清除
+        async function testPromptConfigClear() {
+            const results = [];
+            const resultDiv = document.getElementById('promptConfigResults');
+            
+            try {
+                await chrome.storage.local.remove(['platformPromptConfig']);
+                results.push({ type: 'success', message: '✅ 提示词配置已清除' });
+                
+                document.getElementById('promptConfigDisplay').textContent = '配置已清空';
+                
+            } catch (error) {
+                results.push({ type: 'error', message: `❌ 清除失败: ${error.message}` });
+            }
+            
+            displayResults(resultDiv, results);
+        }
+
+        // 测试创建发布状态
+        async function testCreatePublishResults() {
+            const results = [];
+            const resultDiv = document.getElementById('publishStateResults');
+            
+            try {
+                const testPublishResults = [
+                    {
+                        platform: { id: 'weibo', name: '微博' },
+                        status: 'ready',
+                        message: '内容已预填充，请手动确认并发布',
+                        timestamp: Date.now()
+                    },
+                    {
+                        platform: { id: 'xiaohongshu', name: '小红书' },
+                        status: 'publishing',
+                        message: '正在发布中...',
+                        timestamp: Date.now()
+                    }
+                ];
+
+                await chrome.storage.local.set({ 
+                    publishResults: testPublishResults,
+                    publishStatus: { isPublishing: true, timestamp: Date.now() }
+                });
+                
+                results.push({ type: 'success', message: '✅ 测试发布状态已创建' });
+                
+                document.getElementById('publishStateDisplay').textContent = JSON.stringify(testPublishResults, null, 2);
+                
+            } catch (error) {
+                results.push({ type: 'error', message: `❌ 创建失败: ${error.message}` });
+            }
+            
+            displayResults(resultDiv, results);
+        }
+
+        // 测试加载发布状态
+        async function testLoadPublishResults() {
+            const results = [];
+            const resultDiv = document.getElementById('publishStateResults');
+            
+            try {
+                const result = await chrome.storage.local.get(['publishResults', 'publishStatus']);
+                const publishResults = result.publishResults || [];
+                const publishStatus = result.publishStatus || {};
+                
+                results.push({ 
+                    type: 'info', 
+                    message: `📖 加载发布状态成功，包含 ${publishResults.length} 个平台结果` 
+                });
+                
+                if (publishStatus.isPublishing) {
+                    results.push({ type: 'info', message: '🔄 当前正在发布中' });
+                }
+                
+                document.getElementById('publishStateDisplay').textContent = JSON.stringify({
+                    publishResults,
+                    publishStatus
+                }, null, 2);
+                
+            } catch (error) {
+                results.push({ type: 'error', message: `❌ 加载失败: ${error.message}` });
+            }
+            
+            displayResults(resultDiv, results);
+        }
+
+        // 测试清理发布状态
+        async function testClearPublishResults() {
+            const results = [];
+            const resultDiv = document.getElementById('publishStateResults');
+            
+            try {
+                await chrome.storage.local.remove(['publishResults', 'publishStatus']);
+                results.push({ type: 'success', message: '✅ 发布状态已清理' });
+                
+                document.getElementById('publishStateDisplay').textContent = '发布状态已清空';
+                
+            } catch (error) {
+                results.push({ type: 'error', message: `❌ 清理失败: ${error.message}` });
+            }
+            
+            displayResults(resultDiv, results);
+        }
+
+        // 测试重置发布状态
+        async function testResetPublishState() {
+            const results = [];
+            const resultDiv = document.getElementById('publishStateResults');
+            
+            try {
+                // 模拟发送重置消息到后台脚本
+                const response = await chrome.runtime.sendMessage({
+                    action: 'resetPublishState',
+                    data: {
+                        reason: 'test',
+                        selectedPlatforms: ['weibo', 'xiaohongshu']
+                    }
+                });
+                
+                if (response && response.success) {
+                    results.push({ type: 'success', message: '✅ 发布状态重置成功' });
+                } else {
+                    results.push({ type: 'error', message: '❌ 发布状态重置失败' });
+                }
+                
+            } catch (error) {
+                results.push({ type: 'error', message: `❌ 重置失败: ${error.message}` });
+            }
+            
+            displayResults(resultDiv, results);
+        }
+
+        // 完整工作流程测试
+        async function testFullWorkflow() {
+            const results = [];
+            const resultDiv = document.getElementById('workflowResults');
+            
+            try {
+                results.push({ type: 'info', message: '🚀 开始完整工作流程测试...' });
+                
+                // 1. 保存提示词配置
+                await testPromptConfigSave();
+                results.push({ type: 'success', message: '✅ 步骤1: 提示词配置已保存' });
+                
+                // 2. 创建发布状态
+                await testCreatePublishResults();
+                results.push({ type: 'success', message: '✅ 步骤2: 发布状态已创建' });
+                
+                // 3. 重置发布状态
+                await testResetPublishState();
+                results.push({ type: 'success', message: '✅ 步骤3: 发布状态已重置' });
+                
+                // 4. 验证提示词配置仍然存在
+                const configResult = await chrome.storage.local.get(['platformPromptConfig']);
+                if (configResult.platformPromptConfig && Object.keys(configResult.platformPromptConfig).length > 0) {
+                    results.push({ type: 'success', message: '✅ 步骤4: 提示词配置保持完整' });
+                } else {
+                    results.push({ type: 'error', message: '❌ 步骤4: 提示词配置丢失' });
+                }
+                
+                results.push({ type: 'success', message: '🎉 完整工作流程测试完成' });
+                
+            } catch (error) {
+                results.push({ type: 'error', message: `❌ 工作流程测试失败: ${error.message}` });
+            }
+            
+            displayResults(resultDiv, results);
+        }
+
+        // 页面刷新场景测试
+        async function testPageRefreshScenario() {
+            const results = [];
+            const resultDiv = document.getElementById('workflowResults');
+            
+            try {
+                results.push({ type: 'info', message: '🔄 模拟页面刷新场景测试...' });
+                
+                // 模拟页面刷新前的状态
+                await testPromptConfigSave();
+                await testCreatePublishResults();
+                
+                results.push({ type: 'info', message: '📊 页面刷新前状态已设置' });
+                
+                // 模拟页面刷新后的状态恢复
+                const configResult = await chrome.storage.local.get(['platformPromptConfig']);
+                const publishResult = await chrome.storage.local.get(['publishResults']);
+                
+                if (configResult.platformPromptConfig) {
+                    results.push({ type: 'success', message: '✅ 提示词配置正确恢复' });
+                }
+                
+                if (publishResult.publishResults) {
+                    results.push({ type: 'info', message: '⚠️ 发布状态仍然存在（需要手动清理）' });
+                }
+                
+                results.push({ type: 'info', message: '💡 建议：页面刷新后应该清理发布状态但保留提示词配置' });
+                
+            } catch (error) {
+                results.push({ type: 'error', message: `❌ 页面刷新场景测试失败: ${error.message}` });
+            }
+            
+            displayResults(resultDiv, results);
+        }
+
+        // 显示测试结果
+        function displayResults(container, results) {
+            container.innerHTML = '';
+            results.forEach(result => {
+                const div = document.createElement('div');
+                div.className = `result ${result.type}`;
+                div.textContent = result.message;
+                container.appendChild(div);
+            });
+        }
+
+        // 页面加载时显示当前状态
+        window.addEventListener('load', async () => {
+            await testPromptConfigLoad();
+            await testLoadPublishResults();
+        });
+    </script>
+</body>
+</html>

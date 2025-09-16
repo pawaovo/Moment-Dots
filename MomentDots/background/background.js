@@ -476,7 +476,13 @@ class TaskScheduler {
 
     publishState.isPublishing = true;
     publishState.currentTasks = platforms;
-    publishState.publishResults = [];
+
+    // 不清空整个结果数组，而是只清空当前要发布的平台的状态
+    // 这样可以保持其他平台（如正在优化的平台）的状态
+    const platformIds = platforms.map(p => p.id);
+    publishState.publishResults = publishState.publishResults.filter(
+      result => !platformIds.includes(result.platform.id)
+    );
 
     // 保存状态到存储
     await this.saveState();
@@ -1096,6 +1102,16 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     handlePageRefresh(message.data);
     sendResponse({ success: true });
     return true; // 保持消息通道开放
+  } else if (message.action === 'updatePlatformOptimizationStatus') {
+    // 处理平台优化状态更新
+    handlePlatformOptimizationStatusUpdate(message);
+    sendResponse({ success: true });
+    return true; // 保持消息通道开放
+  } else if (message.action === 'resetPublishState') {
+    // 处理发布状态重置
+    handleResetPublishState(message.data);
+    sendResponse({ success: true });
+    return true; // 保持消息通道开放
   } else if (message.action === 'extensionOpened') {
     // 处理扩展程序图标打开事件
     handleExtensionOpened(message.data);
@@ -1622,9 +1638,82 @@ async function handleArticleExtraction(url, sendResponse) {
   }
 }
 
+// 处理平台优化状态更新
+function handlePlatformOptimizationStatusUpdate(message) {
+  console.log('📊 后台脚本收到平台优化状态更新:', message);
 
+  try {
+    // 创建发布结果对象，与现有的发布结果格式保持一致
+    const publishResult = {
+      platform: {
+        id: message.platformId,
+        name: getPlatformNameById(message.platformId)
+      },
+      status: message.status,
+      message: message.message,
+      timestamp: message.timestamp,
+      isOptimizing: message.status === 'optimizing'
+    };
 
+    // 更新发布状态
+    taskScheduler.updatePublishResult(publishResult);
 
+    console.log('✅ 平台优化状态已更新并转发到侧边栏');
+
+  } catch (error) {
+    console.error('❌ 处理平台优化状态更新失败:', error);
+  }
+}
+
+// 处理发布状态重置 - 优化版本
+function handleResetPublishState(data) {
+  console.log('🔄 后台脚本收到发布状态重置请求:', data.reason);
+
+  try {
+    // 批量重置发布状态
+    Object.assign(publishState, {
+      publishResults: [],
+      isPublishing: false
+    });
+
+    // 保存并广播状态变更
+    taskScheduler.saveState();
+    taskScheduler.broadcastMessage({
+      action: 'publishStateReset',
+      data: {
+        reason: data.reason,
+        selectedPlatforms: data.selectedPlatforms,
+        timestamp: Date.now()
+      }
+    });
+
+    console.log('✅ 发布状态已重置');
+
+  } catch (error) {
+    console.error('❌ 重置发布状态失败:', error);
+  }
+}
+
+// 根据平台ID获取平台名称的辅助函数 - 使用统一的PlatformUtils
+function getPlatformNameById(platformId) {
+  // 如果PlatformUtils可用，使用统一工具
+  if (typeof PlatformUtils !== 'undefined' && PlatformUtils.getPlatformNameById) {
+    return PlatformUtils.getPlatformNameById(platformId);
+  }
+
+  // 降级到本地实现（保持兼容性）
+  const platformNames = {
+    'weibo': '微博',
+    'xiaohongshu': '小红书',
+    'douyin': '抖音',
+    'jike': '即刻',
+    'bilibili': 'B站',
+    'weixinchannels': '微信视频号',
+    'weixin': '微信公众号',
+    'weixin-article': '微信公众号(文章)'
+  };
+  return platformNames[platformId] || platformId;
+}
 
 
 

@@ -70,6 +70,30 @@ const CONFIG = {
   NOTIFICATION_HIDE_DELAY: 300 // 通知隐藏延迟时间（毫秒）
 };
 
+// 提示词选择器配置常量
+const PROMPT_SELECTOR_CONFIG = {
+  DELAYS: {
+    SIDEBAR_LOAD: 800,        // 侧边栏加载延迟
+    SIDEBAR_QUICK: 100,       // 侧边栏快速响应延迟
+    POPUP_HIDE: 100,          // 弹窗隐藏延迟
+    OUTSIDE_CLICK: 100,       // 外部点击检测延迟
+    CONFIG_SAVE: 500          // 配置保存延迟（批量处理）
+  },
+  LIMITS: {
+    MAX_PROMPTS_PER_PLATFORM: 3,  // 每个平台最大提示词数量
+    POPUP_WIDTH: 320,              // 弹窗宽度（从250px增加到320px）
+    POPUP_HEIGHT: 240              // 弹窗高度（相应调整）
+  },
+  SELECTORS: {
+    PROMPT_CONTAINER: '.prompt-selector-container',
+    PROMPT_LABEL: '.prompt-label',
+    PROMPT_CHECKBOX: '.prompt-checkbox',
+    PROMPT_ITEM: '.prompt-item',
+    ADD_PROMPT_BTN: '.add-prompt-btn',
+    REMOVE_PROMPT_BTN: '.remove-prompt-btn'
+  }
+};
+
 // 工具函数集合（提前定义以避免初始化顺序问题）
 const Utils = {
   // 格式化文件大小显示
@@ -1317,7 +1341,7 @@ async function handleExtensionOpenInit() {
 
 // 统一的数据保护初始化处理
 async function handleDataPreservingInit(source) {
-  await clearPublishResults();
+  await clearPublishResults(); // 使用默认参数，普通清理模式
   await loadFromStorageData();
   console.log(`${source}：已保留用户数据，清理发布状态`);
 }
@@ -1389,17 +1413,43 @@ async function checkForUserInput() {
   }
 }
 
-// 只清理发布结果，保留用户输入数据
-async function clearPublishResults() {
-  try {
-    // 使用统一的存储工具清理发布状态
-    await clearStorageKeys(['publishResults', 'publishStatus']);
-    console.log('已清理发布状态数据');
+// 统一的发布状态清理函数 - 优化合并重复逻辑
+async function clearPublishResults(options = {}) {
+  const {
+    isNewSession = false,
+    selectedPlatforms = [],
+    reason = 'manual'
+  } = options;
 
-    // 通知后台脚本清理侧边栏
-    await notifyBackgroundScript('clearPublishResults');
+  try {
+    if (isNewSession) {
+      console.log('🧹 开始新发布会话，清理历史状态...');
+    }
+
+    // 清理Chrome Storage中的发布状态
+    await clearStorageKeys(['publishResults', 'publishStatus']);
+
+    if (isNewSession) {
+      // 新会话需要发送重置消息
+      await chrome.runtime.sendMessage({
+        action: 'resetPublishState',
+        data: { reason, selectedPlatforms }
+      });
+      console.log('✅ 历史发布状态已清理，当前选择平台:', selectedPlatforms);
+    } else {
+      // 普通清理发送清理消息
+      await notifyBackgroundScript('clearPublishResults');
+      console.log('已清理发布状态数据');
+    }
+
   } catch (error) {
-    console.warn('清理发布结果失败:', error);
+    const errorMsg = isNewSession ? '清理发布会话状态失败' : '清理发布结果失败';
+    console.warn(`⚠️ ${errorMsg}:`, error);
+
+    // 新会话清理失败不抛出错误，继续发布流程
+    if (!isNewSession) {
+      throw error;
+    }
   }
 }
 
@@ -2112,32 +2162,304 @@ async function handleStartPublish() {
   showButtonClickFeedback();
 
   try {
-    // 直接使用验证过的内容创建发布数据，避免重复验证
-    const publishData = await createPublishDataFromValidated(contentValidation, mainController);
-    await executePublish(publishData);
+    // 清理历史发布状态，确保从干净状态开始
+    await clearPublishResults({
+      isNewSession: true,
+      selectedPlatforms: appState.selectedPlatforms.map(p => p.id),
+      reason: 'newSession'
+    });
+
+    // 立即打开侧边栏（在用户手势触发的上下文中）
+    await openSidepanelForPublish();
+
+    // 检查是否有平台需要进行内容优化
+    const platformsNeedOptimization = await getPlatformsNeedingOptimization();
+
+    if (platformsNeedOptimization.length > 0) {
+      // 有平台需要优化，先进行内容优化
+      await handleContentOptimizationFlow(contentValidation, platformsNeedOptimization);
+    } else {
+      // 没有平台需要优化，直接发布
+      const publishData = await createPublishDataFromValidated(contentValidation, mainController);
+      await executePublish(publishData);
+    }
 
   } catch (error) {
     Utils.handleError(error, '发布失败，请重试');
   }
+}
+
+// 在用户手势触发的上下文中打开侧边栏
+async function openSidepanelForPublish() {
+  try {
+    console.log('📱 正在打开侧边栏...');
+
+    // 在用户手势触发的上下文中打开侧边栏
+    await chrome.sidePanel.open({ windowId: (await chrome.windows.getCurrent()).id });
+
+    // 等待侧边栏加载完成
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    console.log('✅ 侧边栏已打开');
+
+  } catch (error) {
+    console.error('❌ 打开侧边栏失败:', error);
+    // 不抛出错误，继续执行发布流程
+  }
+}
+
+// AI内容优化功能 - 使用统一的优化服务
+async function optimizeContentWithPrompt(originalContent, promptName) {
+  try {
+    // 使用ContentOptimizationService简化优化逻辑
+    if (window.contentOptimizationService) {
+      return await window.contentOptimizationService.optimizeContent(originalContent, promptName);
+    } else {
+      // 降级到原有实现（保持兼容性）
+      console.log(`🤖 开始AI内容优化，提示词: ${promptName}`);
+      const promptData = await getPromptByName(promptName);
+      if (!promptData) {
+        throw new Error(`未找到提示词: ${promptName}`);
+      }
+      const optimizedContent = await callAIOptimizationAPI(originalContent, promptData);
+      console.log('✅ AI内容优化完成');
+      return optimizedContent;
+    }
+  } catch (error) {
+    console.error('❌ AI内容优化失败:', error);
+    throw new Error(`内容优化失败: ${error.message}`);
+  }
+}
+
+// 获取提示词详细信息
+async function getPromptByName(promptName) {
+  try {
+    // 尝试从MomentDots的存储键获取
+    let result = await chrome.storage.local.get(['promptPrompts']);
+    let prompts = result.promptPrompts || [];
+
+    // 如果没有找到，尝试从独立prompt扩展的存储键获取
+    if (prompts.length === 0) {
+      result = await chrome.storage.local.get(['prompts']);
+      prompts = result.prompts || [];
+    }
+
+    const foundPrompt = prompts.find(prompt => prompt.name === promptName);
+    console.log(`查找提示词 "${promptName}":`, foundPrompt ? '找到' : '未找到', `(共${prompts.length}个提示词)`);
+
+    return foundPrompt;
+  } catch (error) {
+    console.error('获取提示词失败:', error);
+    return null;
+  }
+}
+
+// 调用AI优化API
+async function callAIOptimizationAPI(originalContent, promptData) {
+  try {
+    // 获取AI API设置
+    const settings = await getAISettings();
+    if (!settings) {
+      throw new Error('AI API未配置，请先在提示词助手中配置API Key');
+    }
+
+    // 获取API配置（支持两种设置结构）
+    let apiKey, endpoint;
+
+    if (settings.models && settings.models.length > 0) {
+      // MomentDots格式：settings.models[0].apiKey
+      const model = settings.models.find(m => m.id === (promptData.model || settings.defaultModel)) || settings.models[0];
+      apiKey = model.apiKey;
+      endpoint = model.endpoint;
+    } else if (settings.apiKey) {
+      // 独立prompt扩展格式：settings.apiKey
+      apiKey = settings.apiKey;
+      endpoint = settings.endpoint || 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+    }
+
+    if (!apiKey) {
+      throw new Error('API Key未配置，请先在提示词助手中配置API Key');
+    }
+
+    console.log('使用API配置:', { endpoint: endpoint, hasApiKey: !!apiKey });
+
+    // 构建请求内容
+    let combinedContent = promptData.content;
+    if (combinedContent.includes('【用户输入内容】')) {
+      combinedContent = combinedContent.replace('【用户输入内容】', originalContent);
+    } else {
+      combinedContent = `${promptData.content}\n\n用户输入的内容：\n${originalContent}`;
+    }
+
+    console.log('发送给AI的内容:', combinedContent.substring(0, 200) + '...');
+
+    // 调用Gemini API
+    const requestBody = {
+      contents: [{
+        parts: [{
+          text: combinedContent
+        }]
+      }],
+      generationConfig: {
+        temperature: 0.7,
+        topK: 40,
+        topP: 0.95,
+        maxOutputTokens: 8192,
+      }
+    };
+
+    const response = await fetch(`${endpoint}?key=${apiKey}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody)
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(`API请求失败: ${response.status} ${response.statusText}${errorData.error?.message ? ' - ' + errorData.error.message : ''}`);
+    }
+
+    const data = await response.json();
+
+    if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
+      throw new Error('API返回数据格式错误');
+    }
+
+    const result = data.candidates[0].content.parts[0].text;
+    console.log('AI优化结果:', result.substring(0, 200) + '...');
+
+    return result;
+
+  } catch (error) {
+    console.error('AI API调用失败:', error);
+    throw error;
+  }
+}
+
+// 获取AI设置
+async function getAISettings() {
+  try {
+    // 尝试从MomentDots的存储键获取
+    let result = await chrome.storage.local.get(['promptSettings']);
+    let settings = result.promptSettings;
+
+    // 如果没有找到，尝试从独立prompt扩展的存储键获取
+    if (!settings) {
+      result = await chrome.storage.local.get(['settings']);
+      settings = result.settings;
+    }
+
+    console.log('获取AI设置:', settings ? '找到' : '未找到');
+    return settings || null;
+  } catch (error) {
+    console.error('获取AI设置失败:', error);
+    return null;
+  }
+}
+
+// 平台优化状态管理
+const platformOptimizationStatus = new Map();
+
+// 更新平台优化状态
+function updatePlatformOptimizationStatus(platformId, status, message) {
+  platformOptimizationStatus.set(platformId, {
+    status: status, // 'optimizing', 'publishing', 'completed', 'failed'
+    message: message,
+    timestamp: Date.now()
+  });
+
+  // 通知侧边栏更新状态显示
+  notifySidebarStatusUpdate(platformId, status, message);
+
+  // 状态更新日志已在MessageManager中统一处理
+}
+
+// 获取平台优化状态
+function getPlatformOptimizationStatus(platformId) {
+  return platformOptimizationStatus.get(platformId) || null;
+}
+
+// 清除平台优化状态
+function clearPlatformOptimizationStatus(platformId) {
+  platformOptimizationStatus.delete(platformId);
+}
+
+// 通知侧边栏状态更新 - 使用统一的消息管理器
+function notifySidebarStatusUpdate(platformId, status, message) {
+  // 使用MessageManager简化消息发送逻辑
+  if (window.messageManager) {
+    window.messageManager.sendStatusUpdate(platformId, status, message);
+  } else {
+    // 降级到原有实现（保持兼容性）
+    chrome.runtime.sendMessage({
+      action: 'updatePlatformOptimizationStatus',
+      platformId: platformId,
+      status: status,
+      message: message,
+      timestamp: Date.now()
+    }).catch(error => {
+      console.log('⚠️ 状态更新发送失败:', error.message);
+    });
+  }
+}
+
+// 显示通知消息
+function showNotification(message, type = 'info') {
+  // 创建通知元素
+  const notification = document.createElement('div');
+  notification.className = `notification notification-${type}`;
+  notification.textContent = message;
+
+  // 添加样式
+  Object.assign(notification.style, {
+    position: 'fixed',
+    top: '20px',
+    right: '20px',
+    padding: '12px 20px',
+    borderRadius: '8px',
+    color: 'white',
+    fontWeight: '500',
+    zIndex: '10000',
+    maxWidth: '400px',
+    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+    transform: 'translateX(100%)',
+    transition: 'transform 0.3s ease-in-out'
+  });
+
+  // 根据类型设置背景色
+  const colors = {
+    success: '#10b981',
+    error: '#ef4444',
+    warning: '#f59e0b',
+    info: '#3b82f6'
+  };
+  notification.style.backgroundColor = colors[type] || colors.info;
+
+  // 添加到页面
+  document.body.appendChild(notification);
+
+  // 显示动画
+  setTimeout(() => {
+    notification.style.transform = 'translateX(0)';
+  }, 100);
+
+  // 自动隐藏
+  setTimeout(() => {
+    notification.style.transform = 'translateX(100%)';
+    setTimeout(() => {
+      if (notification.parentNode) {
+        notification.parentNode.removeChild(notification);
+      }
+    }, 300);
+  }, 3000);
 }
 // 提取文件ID的辅助函数
 function extractFileIds(previews) {
   return (previews || [])
     .filter(preview => preview.id && preview.id.startsWith('file_'))
     .map(preview => preview.id);
-}
-
-/**
- * 基于已验证内容创建发布数据（优化版，避免重复验证）
- */
-async function createPublishDataFromValidated(validatedContent, useFileIds = false) {
-  const { content, title } = validatedContent;
-
-  // 同步到appState
-  appState.content = content;
-  appState.title = title;
-
-  return await buildPublishDataStructure(title, content, useFileIds);
 }
 
 // 创建发布数据的统一函数（保留向后兼容）
@@ -2147,20 +2469,43 @@ async function createPublishData(useFileIds = false) {
 }
 
 /**
- * 构建发布数据结构（提取的公共逻辑）
+ * 基于已验证内容创建发布数据（优化版，避免重复验证）
+ * @param {Object} validatedContent - 已验证的内容
+ * @param {boolean} useFileIds - 是否使用文件ID
+ * @param {Array} specificPlatforms - 指定的平台列表（可选，默认使用所有选中平台）
  */
-async function buildPublishDataStructure(title, content, useFileIds = false) {
+async function createPublishDataFromValidated(validatedContent, useFileIds = false, specificPlatforms = null) {
+  const { content, title } = validatedContent;
+  const platformsToUse = specificPlatforms || appState.selectedPlatforms;
+
+  // 同步到appState
+  appState.content = content;
+  appState.title = title;
+
+  return await buildPublishDataStructure(title, content, useFileIds, platformsToUse);
+}
+
+/**
+ * 构建发布数据结构（提取的公共逻辑）
+ * @param {string} title - 标题
+ * @param {string} content - 内容
+ * @param {boolean} useFileIds - 是否使用文件ID
+ * @param {Array} platformsToUse - 要使用的平台列表
+ */
+async function buildPublishDataStructure(title, content, useFileIds = false, platformsToUse = null) {
+  const platforms = platformsToUse || appState.selectedPlatforms;
+
   console.log('📝 发布数据创建完成', {
     contentType: appState.currentContentType,
     titleLength: title.length,
     contentLength: content.length,
-    platformCount: appState.selectedPlatforms.length
+    platformCount: platforms.length
   });
 
   // 添加URL路由调试日志
   console.log('🔗 平台URL路由调试:', {
     contentType: appState.currentContentType,
-    platforms: appState.selectedPlatforms.map(p => ({
+    platforms: platforms.map(p => ({
       name: p.name,
       originalUrl: p.publishUrl,
       routedUrl: getPlatformPublishUrl(p, appState.currentContentType)
@@ -2168,7 +2513,7 @@ async function buildPublishDataStructure(title, content, useFileIds = false) {
   });
 
   // 根据内容类型更新平台的发布URL
-  const platformsWithCorrectUrls = appState.selectedPlatforms.map(platform => ({
+  const platformsWithCorrectUrls = platforms.map(platform => ({
     ...platform,
     publishUrl: getPlatformPublishUrl(platform, appState.currentContentType)
   }));
@@ -2248,6 +2593,146 @@ async function buildPublishDataStructure(title, content, useFileIds = false) {
   return baseData;
 }
 
+// 获取需要内容优化的平台列表
+async function getPlatformsNeedingOptimization() {
+  const platformsNeedOptimization = [];
+
+  for (const platform of appState.selectedPlatforms) {
+    const config = getPlatformPromptConfig(platform.id);
+    if (config.isEnabled && config.selectedPrompt) {
+      platformsNeedOptimization.push({
+        platform: platform,
+        promptName: config.selectedPrompt
+      });
+    }
+  }
+
+  console.log('需要内容优化的平台:', platformsNeedOptimization.map(p => p.platform.name));
+  return platformsNeedOptimization;
+}
+
+// 处理内容优化流程 - 并发优化版本
+async function handleContentOptimizationFlow(contentValidation, platformsNeedOptimization) {
+  console.log('🎯 开始内容优化流程（并发模式）...');
+
+  // 分离需要优化和不需要优化的平台
+  const platformsNeedOptimizationIds = platformsNeedOptimization.map(p => p.platform.id);
+  const platformsNoOptimization = appState.selectedPlatforms.filter(
+    platform => !platformsNeedOptimizationIds.includes(platform.id)
+  );
+
+  // 立即为需要优化的平台显示"优化中"状态
+  for (const { platform, promptName } of platformsNeedOptimization) {
+    updatePlatformOptimizationStatus(platform.id, 'optimizing', `正在使用"${promptName}"优化内容...`);
+  }
+
+  // 先发布不需要优化的平台
+  if (platformsNoOptimization.length > 0) {
+    console.log('📤 先发布不需要优化的平台:', platformsNoOptimization.map(p => p.name));
+    const publishDataNoOptimization = await createPublishDataFromValidated(
+      contentValidation,
+      mainController,
+      platformsNoOptimization
+    );
+    await executePublish(publishDataNoOptimization);
+  }
+
+  // 并发处理需要优化的平台
+  if (platformsNeedOptimization.length > 0) {
+    await handleConcurrentOptimization(contentValidation, platformsNeedOptimization);
+  }
+}
+
+// 并发优化处理函数 - 优化版本
+async function handleConcurrentOptimization(contentValidation, platformsNeedOptimization) {
+  console.log(`🚀 并发优化 ${platformsNeedOptimization.length} 个平台:`,
+    platformsNeedOptimization.map(p => p.platform.name));
+
+  try {
+    // 创建所有优化任务，错误处理已在optimizeAndPublishPlatform中完成
+    const optimizationPromises = platformsNeedOptimization.map(({ platform, promptName }) =>
+      optimizeAndPublishPlatform(contentValidation, platform, promptName)
+        .then(result => ({ platform, success: true, result }))
+        .catch(error => {
+          // 错误已在handleOptimizationError中处理，这里只记录结果
+          return { platform, success: false, error: error.message };
+        })
+    );
+
+    // 等待所有优化完成
+    const results = await Promise.all(optimizationPromises);
+
+    // 统计并显示结果
+    const successCount = results.filter(r => r.success).length;
+    const failureCount = results.length - successCount;
+
+    console.log(`🎉 并发优化完成: ${successCount}/${results.length}`);
+
+    // 简化的通知逻辑
+    if (failureCount === 0) {
+      showNotification(`所有 ${successCount} 个平台内容优化完成`, 'success');
+    } else if (successCount > 0) {
+      showNotification(`${successCount} 个平台优化成功，${failureCount} 个失败`, 'warning');
+    } else {
+      showNotification('所有平台优化失败，请检查网络和API配置', 'error');
+    }
+
+  } catch (error) {
+    console.error('❌ 并发优化流程异常:', error);
+    showNotification('内容优化流程异常，请重试', 'error');
+  }
+}
+
+// 优化并发布单个平台 - 重构为更清晰的职责分离
+async function optimizeAndPublishPlatform(contentValidation, platform, promptName) {
+  const platformName = platform.name;
+
+  try {
+    console.log(`🔄 开始优化平台 ${platformName} 的内容，使用提示词: ${promptName}`);
+
+    // 步骤1: 内容优化
+    const optimizedContent = await optimizeContentWithPrompt(contentValidation.content, promptName);
+
+    // 步骤2: 更新状态并准备发布数据
+    updatePlatformOptimizationStatus(platform.id, 'publishing', '内容优化完成，正在发布...');
+
+    const optimizedContentValidation = {
+      ...contentValidation,
+      content: optimizedContent
+    };
+
+    // 步骤3: 执行发布
+    await publishOptimizedContent(optimizedContentValidation, platform);
+
+    console.log(`✅ 平台 ${platformName} 内容优化和发布完成`);
+    return true;
+
+  } catch (error) {
+    return handleOptimizationError(platform, error);
+  }
+}
+
+// 发布优化后的内容
+async function publishOptimizedContent(contentValidation, platform) {
+  const publishData = await createPublishDataFromValidated(
+    contentValidation,
+    mainController,
+    [platform]
+  );
+  await executePublish(publishData);
+}
+
+// 处理优化错误
+function handleOptimizationError(platform, error) {
+  const errorMessage = `优化失败: ${error.message}`;
+  console.error(`❌ 平台 ${platform.name} ${errorMessage}:`, error);
+
+  updatePlatformOptimizationStatus(platform.id, 'failed', errorMessage);
+  showNotification(`${platform.name} 内容${errorMessage}`, 'error');
+
+  return false; // 不抛出错误，继续处理其他平台
+}
+
 // 执行发布的统一函数
 async function executePublish(publishData) {
   try {
@@ -2277,13 +2762,7 @@ async function executePublish(publishData) {
       throw new Error('发布请求失败');
     }
 
-    // 获取当前窗口并打开侧边栏
-    try {
-      const currentWindow = await chrome.windows.getCurrent();
-      await chrome.sidePanel.open({ windowId: currentWindow.id });
-    } catch (sidePanelError) {
-      console.warn('Failed to open side panel:', sidePanelError);
-    }
+    // 不再重复打开侧边栏，因为已经在handleStartPublish中打开了
 
     // 显示成功提示
     showNotification('发布任务已启动，请查看侧边栏监控进度', 'success');
@@ -2773,18 +3252,703 @@ function showNotification(message, type = 'info') {
 // 处理提示词助手按钮点击
 async function handleOpenPromptHelper() {
   try {
+    // 检查侧边栏是否已经打开
+    const isSidePanelAlreadyOpen = isSidePanelOpen();
+
     // 打开侧边栏并切换到提示词助手视图
     await chrome.sidePanel.open({ windowId: (await chrome.windows.getCurrent()).id });
 
-    // 发送消息到侧边栏，切换到提示词视图
-    chrome.runtime.sendMessage({
-      action: 'switchToPromptView'
-    });
+    // 如果侧边栏之前没有打开，需要等待其完全加载
+    const delay = isSidePanelAlreadyOpen ? PROMPT_SELECTOR_CONFIG.DELAYS.SIDEBAR_QUICK : PROMPT_SELECTOR_CONFIG.DELAYS.SIDEBAR_LOAD;
+
+    // 延迟发送消息，确保侧边栏已完全加载
+    setTimeout(() => {
+      // 发送消息到侧边栏，切换到提示词视图（统一使用带平台信息的格式）
+      chrome.runtime.sendMessage({
+        action: 'switchToPromptView',
+        platformId: null, // 通用模式，不指定特定平台
+        platformName: null
+      });
+
+      console.log(`已发送switchToPromptView消息（通用模式），延迟: ${delay}ms`);
+    }, delay);
 
     showNotification('提示词助手已打开', 'success');
   } catch (error) {
     console.error('打开提示词助手失败:', error);
     showNotification('打开提示词助手失败，请重试', 'error');
+  }
+}
+
+// ===== 提示词选择器功能 =====
+
+// DOM缓存管理器
+class PromptSelectorDOMCache {
+  constructor() {
+    this.cache = new Map();
+  }
+
+  getPromptContainer(platformId) {
+    const key = `prompt-container-${platformId}`;
+    if (!this.cache.has(key)) {
+      const element = document.querySelector(`${PROMPT_SELECTOR_CONFIG.SELECTORS.PROMPT_CONTAINER}[data-platform-id="${platformId}"]`);
+      this.cache.set(key, element);
+    }
+    return this.cache.get(key);
+  }
+
+  getPromptLabel(platformId) {
+    const key = `prompt-label-${platformId}`;
+    if (!this.cache.has(key)) {
+      const element = document.querySelector(`${PROMPT_SELECTOR_CONFIG.SELECTORS.PROMPT_LABEL}[data-platform-id="${platformId}"]`);
+      this.cache.set(key, element);
+    }
+    return this.cache.get(key);
+  }
+
+  getPromptCheckbox(platformId) {
+    const key = `prompt-checkbox-${platformId}`;
+    if (!this.cache.has(key)) {
+      const element = document.querySelector(`${PROMPT_SELECTOR_CONFIG.SELECTORS.PROMPT_CHECKBOX}[data-platform-id="${platformId}"]`);
+      this.cache.set(key, element);
+    }
+    return this.cache.get(key);
+  }
+
+  invalidateCache(platformId = null) {
+    if (platformId) {
+      // 清除特定平台的缓存
+      this.cache.delete(`prompt-container-${platformId}`);
+      this.cache.delete(`prompt-label-${platformId}`);
+      this.cache.delete(`prompt-checkbox-${platformId}`);
+    } else {
+      // 清除所有缓存
+      this.cache.clear();
+    }
+  }
+}
+
+// 平台提示词配置状态
+let platformPromptConfig = {};
+
+// 当前显示的悬浮弹窗
+let currentPromptPopup = null;
+
+// DOM缓存实例
+const promptDOMCache = new PromptSelectorDOMCache();
+
+// 统一的弹窗事件处理器
+class PromptPopupEventHandler {
+  constructor() {
+    this.outsideClickHandler = null;
+  }
+
+  // 绑定弹窗的事件（点击模式下不需要鼠标进出事件）
+  bindPopupEvents(popup) {
+    // 阻止弹窗内部点击事件冒泡，避免触发外部点击关闭
+    popup.addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
+  }
+
+  // 绑定容器的点击事件
+  bindContainerEvents(container, platformId) {
+    if (!container) return;
+
+    // 清理所有旧的事件监听器
+    this.cleanupContainerEvents(container);
+
+    // 创建新的点击事件处理器
+    container._clickHandler = (e) => {
+      // 检查点击的是否是复选框，如果是则不触发弹窗
+      if (e.target.classList.contains('prompt-checkbox') ||
+          e.target.type === 'checkbox') {
+        return; // 让复选框的默认行为和change事件处理
+      }
+
+      e.stopPropagation();
+      // 如果弹窗已显示且是同一个平台，则隐藏弹窗
+      if (currentPromptPopup && currentPromptPopup.dataset.platformId === platformId) {
+        hidePromptPopup();
+      } else {
+        // 显示弹窗
+        showPromptPopup(platformId, container);
+      }
+    };
+
+    // 绑定点击事件
+    container.addEventListener('click', container._clickHandler);
+
+    // 标记已绑定事件
+    container._eventsbound = true;
+  }
+
+  // 清理容器事件监听器
+  cleanupContainerEvents(container) {
+    if (container._clickHandler) {
+      container.removeEventListener('click', container._clickHandler);
+      container._clickHandler = null;
+    }
+    container._eventsbound = false;
+  }
+
+  // 绑定全局外部点击事件
+  bindOutsideClickHandler() {
+    if (this.outsideClickHandler) {
+      document.removeEventListener('click', this.outsideClickHandler);
+    }
+
+    this.outsideClickHandler = (e) => {
+      // 检查点击是否在弹窗外部
+      if (currentPromptPopup && !currentPromptPopup.contains(e.target)) {
+        hidePromptPopup();
+      }
+    };
+
+    // 延迟绑定，避免立即触发
+    setTimeout(() => {
+      document.addEventListener('click', this.outsideClickHandler);
+    }, PROMPT_SELECTOR_CONFIG.DELAYS.OUTSIDE_CLICK);
+  }
+
+  // 移除全局外部点击事件
+  unbindOutsideClickHandler() {
+    if (this.outsideClickHandler) {
+      document.removeEventListener('click', this.outsideClickHandler);
+      this.outsideClickHandler = null;
+    }
+  }
+}
+
+const popupEventHandler = new PromptPopupEventHandler();
+
+
+
+// 初始化平台提示词配置
+async function initializePlatformPromptConfig() {
+  try {
+    const result = await chrome.storage.local.get(['platformPromptConfig']);
+    platformPromptConfig = result.platformPromptConfig || {};
+    console.log('平台提示词配置已加载:', platformPromptConfig);
+  } catch (error) {
+    console.error('加载平台提示词配置失败:', error);
+    platformPromptConfig = {};
+  }
+}
+
+// 配置管理器，支持批量保存以提高性能
+class PlatformPromptConfigManager {
+  constructor() {
+    this.pendingSave = false;
+    this.saveDelay = PROMPT_SELECTOR_CONFIG.DELAYS.CONFIG_SAVE;
+  }
+
+  // 立即保存配置（用于重要操作）
+  async saveImmediately() {
+    try {
+      await chrome.storage.local.set({ platformPromptConfig });
+      console.log('平台提示词配置已保存');
+    } catch (error) {
+      console.error('保存平台提示词配置失败:', error);
+    }
+  }
+
+  // 延迟保存配置（批量处理，提高性能）
+  scheduleSave() {
+    if (this.pendingSave) return;
+    this.pendingSave = true;
+
+    setTimeout(async () => {
+      try {
+        await chrome.storage.local.set({ platformPromptConfig });
+        console.log('平台提示词配置已批量保存');
+      } catch (error) {
+        console.error('保存平台提示词配置失败:', error);
+      } finally {
+        this.pendingSave = false;
+      }
+    }, this.saveDelay);
+  }
+}
+
+const configManager = new PlatformPromptConfigManager();
+
+// 保存平台提示词配置（向后兼容）
+async function savePlatformPromptConfig() {
+  await configManager.saveImmediately();
+}
+
+// 获取平台的提示词配置
+function getPlatformPromptConfig(platformId) {
+  return platformPromptConfig[platformId] || {
+    selectedPrompt: null,
+    availablePrompts: [],
+    isEnabled: false
+  };
+}
+
+// 更新平台的提示词配置
+function updatePlatformPromptConfig(platformId, config, immediate = false) {
+  platformPromptConfig[platformId] = {
+    ...getPlatformPromptConfig(platformId),
+    ...config
+  };
+
+  // 根据需要选择立即保存或延迟保存
+  if (immediate) {
+    configManager.saveImmediately();
+  } else {
+    configManager.scheduleSave();
+  }
+}
+
+// 绑定提示词选择器事件
+function bindPromptSelectorEvents(platform) {
+  const promptContainer = promptDOMCache.getPromptContainer(platform.id);
+  const promptLabel = promptDOMCache.getPromptLabel(platform.id);
+  const promptCheckbox = promptDOMCache.getPromptCheckbox(platform.id);
+
+  // 检查是否已经绑定过事件，避免重复绑定
+  if (promptContainer && !promptContainer._eventsbound) {
+    // 使用统一的事件处理器绑定容器事件
+    popupEventHandler.bindContainerEvents(promptContainer, platform.id);
+  }
+
+
+
+  if (promptCheckbox) {
+    // 移除旧的事件监听器（如果存在）
+    if (promptCheckbox._changeHandler) {
+      promptCheckbox.removeEventListener('change', promptCheckbox._changeHandler);
+    }
+    if (promptCheckbox._clickHandler) {
+      promptCheckbox.removeEventListener('click', promptCheckbox._clickHandler);
+    }
+
+    // 创建change事件处理器
+    promptCheckbox._changeHandler = (e) => {
+      e.stopPropagation();
+      const config = getPlatformPromptConfig(platform.id);
+      updatePlatformPromptConfig(platform.id, {
+        isEnabled: e.target.checked
+      });
+    };
+
+    // 创建click事件处理器，防止冒泡到容器
+    promptCheckbox._clickHandler = (e) => {
+      e.stopPropagation();
+      // 不阻止默认行为，让复选框正常工作
+    };
+
+    promptCheckbox.addEventListener('change', promptCheckbox._changeHandler);
+    promptCheckbox.addEventListener('click', promptCheckbox._clickHandler);
+  }
+
+  // 智能恢复保存的状态，确保DOM元素完全加载
+  requestAnimationFrame(() => {
+    restorePromptSelectorState(platform.id);
+  });
+}
+
+// 恢复提示词选择器状态 - 优化版本
+function restorePromptSelectorState(platformId) {
+  const config = getPlatformPromptConfig(platformId);
+  const promptLabel = promptDOMCache.getPromptLabel(platformId);
+  const promptCheckbox = promptDOMCache.getPromptCheckbox(platformId);
+
+  // 只在有配置变化时才输出日志
+  if (config.selectedPrompt) {
+    console.log(`恢复平台 ${platformId} 的提示词状态:`, config.selectedPrompt);
+  }
+
+  // 统一处理标签状态
+  if (promptLabel) {
+    const hasHistory = config.selectedPrompt;
+    promptLabel.textContent = hasHistory ? config.selectedPrompt : '无模板';
+    promptLabel.className = promptLabel.className.replace(/text-(blue|gray)-600/g, '') + ' text-gray-600';
+    promptLabel.title = hasHistory
+      ? `上次使用: ${config.selectedPrompt}，点击重新选择`
+      : '点击选择提示词模板';
+  }
+
+  // 统一处理复选框状态
+  if (promptCheckbox) {
+    promptCheckbox.checked = false;
+    // 批量更新配置，避免频繁保存
+    updatePlatformPromptConfig(platformId, { isEnabled: false }, false);
+  }
+}
+
+// 切换提示词选择状态
+function togglePromptSelection(platformId) {
+  const config = getPlatformPromptConfig(platformId);
+  const promptCheckbox = promptDOMCache.getPromptCheckbox(platformId);
+
+  if (config.selectedPrompt && promptCheckbox) {
+    promptCheckbox.checked = !promptCheckbox.checked;
+    updatePlatformPromptConfig(platformId, {
+      isEnabled: promptCheckbox.checked
+    });
+  }
+}
+
+
+
+// 显示提示词选择弹窗
+function showPromptPopup(platformId, targetElement) {
+  // 关闭已存在的弹窗
+  hidePromptPopup();
+
+  const config = getPlatformPromptConfig(platformId);
+  const popup = createPromptPopup(platformId, config);
+
+  // 设置平台ID标识
+  popup.dataset.platformId = platformId;
+
+  // 定位弹窗
+  positionPromptPopup(popup, targetElement);
+
+  // 添加到页面
+  document.body.appendChild(popup);
+  currentPromptPopup = popup;
+
+  // 使用统一的事件处理器绑定弹窗事件
+  popupEventHandler.bindPopupEvents(popup);
+
+  // 绑定外部点击关闭事件
+  popupEventHandler.bindOutsideClickHandler();
+}
+
+// 隐藏提示词选择弹窗
+function hidePromptPopup() {
+  if (currentPromptPopup) {
+    currentPromptPopup.remove();
+    currentPromptPopup = null;
+  }
+
+  // 移除外部点击事件监听器
+  popupEventHandler.unbindOutsideClickHandler();
+}
+
+// 创建提示词选择弹窗
+function createPromptPopup(platformId, config) {
+  const popup = document.createElement('div');
+  popup.className = 'prompt-popup fixed bg-white border border-gray-200 rounded-lg shadow-lg p-5 z-50';
+
+  const promptList = config.availablePrompts.slice(0, PROMPT_SELECTOR_CONFIG.LIMITS.MAX_PROMPTS_PER_PLATFORM);
+
+  popup.innerHTML = `
+    <div class="prompt-popup-wrapper flex flex-col h-full">
+      <!-- 内容区域 -->
+      <div class="prompt-popup-content flex-1 overflow-y-auto">
+        ${promptList.length > 0 ? `
+          <div class="space-y-3 p-1">
+            ${promptList.map(prompt => `
+              <div class="prompt-item flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors" data-prompt-name="${prompt}">
+                <span class="text-sm text-gray-700 flex-1 truncate pr-2">${prompt}</span>
+                <button class="remove-prompt-btn text-red-500 hover:text-red-700 ml-2 text-sm font-medium" data-prompt-name="${prompt}">×</button>
+              </div>
+            `).join('')}
+          </div>
+        ` : `
+          <div class="text-sm text-gray-500 text-center py-8">暂无可用模板</div>
+        `}
+      </div>
+
+      <!-- 底部固定按钮区域 -->
+      <div class="prompt-popup-footer border-t border-gray-100 pt-3 mt-3">
+        <button class="add-prompt-btn w-full text-sm font-medium text-blue-600 hover:text-blue-800 border border-blue-200 hover:border-blue-300 rounded-lg px-4 py-3 transition-colors">
+          添加
+        </button>
+      </div>
+    </div>
+  `;
+
+  // 绑定弹窗内的事件
+  bindPromptPopupEvents(popup, platformId);
+
+  return popup;
+}
+
+// 检测侧边栏是否打开
+function isSidePanelOpen() {
+  // 方法1：检查页面宽度变化
+  // Chrome侧边栏通常占用400-500px，当打开时页面宽度会明显减少
+  const currentWidth = window.innerWidth;
+  const screenWidth = window.screen.availWidth;
+
+  // 如果当前窗口宽度明显小于屏幕宽度，可能是侧边栏打开了
+  if (currentWidth < screenWidth * 0.75) {
+    return true;
+  }
+
+  // 方法2：检查主容器的位置
+  const mainContainer = document.querySelector('.main-container') || document.body;
+  if (mainContainer) {
+    const containerRect = mainContainer.getBoundingClientRect();
+    // 如果主容器的右边距离窗口右边有明显距离，说明侧边栏可能打开了
+    const rightGap = window.innerWidth - containerRect.right;
+    if (rightGap > 100) {
+      return true;
+    }
+  }
+
+  // 方法3：检查是否存在侧边栏相关的DOM元素或样式变化
+  const bodyStyle = window.getComputedStyle(document.body);
+  const hasTransform = bodyStyle.transform && bodyStyle.transform !== 'none';
+
+  return hasTransform;
+}
+
+// 定位提示词弹窗（改进版，考虑侧边栏状态）
+function positionPromptPopup(popup, targetElement) {
+  const rect = targetElement.getBoundingClientRect();
+  const popupRect = {
+    width: PROMPT_SELECTOR_CONFIG.LIMITS.POPUP_WIDTH,
+    height: PROMPT_SELECTOR_CONFIG.LIMITS.POPUP_HEIGHT
+  };
+
+  // 检测侧边栏状态
+  const sidePanelOpen = isSidePanelOpen();
+
+  // 计算可用的右侧空间
+  let availableRightSpace = window.innerWidth - rect.right;
+
+  // 如果侧边栏打开，减少可用空间（侧边栏通常占用400-500px）
+  if (sidePanelOpen) {
+    availableRightSpace -= 450; // 预留侧边栏空间
+  }
+
+  // 默认显示在目标元素右侧
+  let left = rect.right + 10;
+  let top = rect.top;
+
+  // 检查右侧空间是否足够
+  if (availableRightSpace < popupRect.width + 20) {
+    // 右侧空间不足，显示在左侧
+    left = rect.left - popupRect.width - 10;
+
+    // 如果左侧也不够，尝试调整到合适位置
+    if (left < 10) {
+      if (sidePanelOpen) {
+        // 侧边栏打开时，优先显示在目标元素上方或下方
+        left = rect.left;
+        if (rect.top > popupRect.height + 20) {
+          top = rect.top - popupRect.height - 10; // 显示在上方
+        } else {
+          top = rect.bottom + 10; // 显示在下方
+        }
+      } else {
+        // 侧边栏未打开时，强制显示在右侧
+        left = window.innerWidth - popupRect.width - 10;
+      }
+    }
+  }
+
+  // 检查垂直位置，确保弹窗不超出屏幕
+  if (top + popupRect.height > window.innerHeight) {
+    top = window.innerHeight - popupRect.height - 10;
+  }
+
+  // 确保弹窗不超出屏幕边界
+  left = Math.max(10, Math.min(left, window.innerWidth - popupRect.width - 10));
+  top = Math.max(10, top);
+
+  popup.style.left = `${left}px`;
+  popup.style.top = `${top}px`;
+
+
+}
+
+// 绑定弹窗内的事件
+function bindPromptPopupEvents(popup, platformId) {
+  // 提示词项目点击事件
+  popup.querySelectorAll('.prompt-item').forEach(item => {
+    item.addEventListener('click', (e) => {
+      if (e.target.classList.contains('remove-prompt-btn')) return;
+
+      const promptName = item.dataset.promptName;
+      selectPromptForPlatform(platformId, promptName);
+      hidePromptPopup();
+    });
+  });
+
+  // 删除提示词按钮事件
+  popup.querySelectorAll('.remove-prompt-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const promptName = btn.dataset.promptName;
+      removePromptFromPlatform(platformId, promptName);
+      hidePromptPopup();
+    });
+  });
+
+  // 添加提示词按钮事件
+  const addBtn = popup.querySelector('.add-prompt-btn');
+  if (addBtn) {
+    addBtn.addEventListener('click', () => {
+      openPromptHelperForPlatform(platformId);
+      hidePromptPopup();
+    });
+  }
+
+
+}
+
+// 处理弹窗外部点击
+function handlePopupOutsideClick(e) {
+  if (currentPromptPopup && !currentPromptPopup.contains(e.target)) {
+    hidePromptPopup();
+    document.removeEventListener('click', handlePopupOutsideClick, true);
+  }
+}
+
+// 为平台选择提示词
+function selectPromptForPlatform(platformId, promptName) {
+  const config = getPlatformPromptConfig(platformId);
+  updatePlatformPromptConfig(platformId, {
+    selectedPrompt: promptName,
+    isEnabled: true
+  });
+
+  // 更新UI显示
+  const promptLabel = promptDOMCache.getPromptLabel(platformId);
+  const promptCheckbox = promptDOMCache.getPromptCheckbox(platformId);
+
+  if (promptLabel) {
+    promptLabel.textContent = promptName;
+    promptLabel.classList.add('text-blue-600');
+    promptLabel.classList.remove('text-gray-600');
+  }
+
+  if (promptCheckbox) {
+    promptCheckbox.checked = true;
+  }
+
+  showNotification(`已为${getPlatformName(platformId)}选择提示词: ${promptName}`, 'success');
+}
+
+// 从平台移除提示词
+function removePromptFromPlatform(platformId, promptName) {
+  const config = getPlatformPromptConfig(platformId);
+  const updatedPrompts = config.availablePrompts.filter(p => p !== promptName);
+
+  updatePlatformPromptConfig(platformId, {
+    availablePrompts: updatedPrompts
+  });
+
+  // 如果移除的是当前选中的提示词，重置选择
+  if (config.selectedPrompt === promptName) {
+    updatePlatformPromptConfig(platformId, {
+      selectedPrompt: null,
+      isEnabled: false
+    });
+
+    // 更新UI显示
+    const promptLabel = promptDOMCache.getPromptLabel(platformId);
+    const promptCheckbox = promptDOMCache.getPromptCheckbox(platformId);
+
+    if (promptLabel) {
+      promptLabel.textContent = '无模板';
+      promptLabel.classList.remove('text-blue-600');
+      promptLabel.classList.add('text-gray-600');
+    }
+
+    if (promptCheckbox) {
+      promptCheckbox.checked = false;
+    }
+  }
+
+  showNotification(`已从${getPlatformName(platformId)}移除提示词"${promptName}"`, 'success');
+}
+
+// 为特定平台打开提示词助手
+async function openPromptHelperForPlatform(platformId) {
+  try {
+    // 保存当前操作的平台ID
+    window.currentPromptPlatformId = platformId;
+
+    // 检查侧边栏是否已经打开
+    const isSidePanelAlreadyOpen = isSidePanelOpen();
+
+    // 打开侧边栏
+    await chrome.sidePanel.open({ windowId: (await chrome.windows.getCurrent()).id });
+
+    // 如果侧边栏之前没有打开，需要等待其完全加载
+    const delay = isSidePanelAlreadyOpen ? PROMPT_SELECTOR_CONFIG.DELAYS.SIDEBAR_QUICK : PROMPT_SELECTOR_CONFIG.DELAYS.SIDEBAR_LOAD;
+
+    // 延迟发送消息，确保侧边栏已完全加载
+    setTimeout(() => {
+      // 发送消息到侧边栏，切换到提示词视图并传递平台信息
+      chrome.runtime.sendMessage({
+        action: 'switchToPromptView',
+        platformId: platformId,
+        platformName: getPlatformName(platformId)
+      });
+
+      console.log(`已发送switchToPromptView消息，平台: ${platformId}, 延迟: ${delay}ms`);
+    }, delay);
+
+    showNotification('提示词助手已打开，请选择要添加的提示词', 'success');
+  } catch (error) {
+    console.error('打开提示词助手失败:', error);
+    showNotification('打开提示词助手失败，请重试', 'error');
+  }
+}
+
+// 获取平台名称
+function getPlatformName(platformId) {
+  const platform = [...SUPPORTED_PLATFORMS, ...getArticlePlatforms(), ...getVideoSupportedPlatforms()]
+    .find(p => p.id === platformId);
+  return platform ? platform.name : platformId;
+}
+
+// 从提示词助手添加提示词到平台
+function addPromptToPlatform(platformId, promptName) {
+  const config = getPlatformPromptConfig(platformId);
+
+  // 检查是否已存在
+  if (config.availablePrompts.includes(promptName)) {
+    showNotification('该提示词已存在', 'warning');
+    return;
+  }
+
+  // 最多保存指定数量的提示词
+  const updatedPrompts = [...config.availablePrompts, promptName].slice(-PROMPT_SELECTOR_CONFIG.LIMITS.MAX_PROMPTS_PER_PLATFORM);
+
+  updatePlatformPromptConfig(platformId, {
+    availablePrompts: updatedPrompts
+  });
+
+  showNotification(`已添加提示词"${promptName}"到${getPlatformName(platformId)}`, 'success');
+}
+
+
+
+// 监听来自侧边栏的消息
+function setupPromptHelperMessageListener() {
+  if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage) {
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+      if (message.action === 'addPromptToPlatform') {
+        const { platformId, promptName } = message;
+        if (platformId && promptName) {
+          addPromptToPlatform(platformId, promptName);
+          sendResponse({ success: true });
+        } else {
+          sendResponse({ success: false, error: '缺少必要参数' });
+        }
+        return true;
+      } else if (message.action === 'removePromptFromPlatform') {
+        const { platformId, promptName } = message;
+        if (platformId && promptName) {
+          removePromptFromPlatform(platformId, promptName);
+          sendResponse({ success: true });
+        } else {
+          sendResponse({ success: false, error: '缺少必要参数' });
+        }
+        return true;
+      }
+    });
   }
 }
 
@@ -3058,16 +4222,36 @@ function createPageContent() {
             <div class="p-6">
               <div class="space-y-4" id="platform-list">
                 ${SUPPORTED_PLATFORMS.map(platform => `
-                  <div class="flex items-center p-4 border border-gray-200 rounded-lg hover:border-blue-300 transition-colors cursor-pointer platform-item" data-platform-id="${platform.id}">
-                    <input
-                      type="checkbox"
-                      id="platform-${platform.id}"
-                      class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
-                    />
-                    <div class="ml-4 flex-1">
-                      <div class="flex items-center">
-                        ${generatePlatformLogoHTML(platform)}
-                        <span class="text-sm font-medium text-gray-900">${platform.name}</span>
+                  <div class="flex items-center space-x-3">
+                    <!-- 平台选择区域 -->
+                    <div class="flex-1 flex items-center p-4 border border-gray-200 rounded-lg hover:border-blue-300 transition-colors cursor-pointer platform-item" data-platform-id="${platform.id}">
+                      <input
+                        type="checkbox"
+                        id="platform-${platform.id}"
+                        class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+                      />
+                      <div class="ml-4 flex-1">
+                        <div class="flex items-center">
+                          ${generatePlatformLogoHTML(platform)}
+                          <span class="text-sm font-medium text-gray-900">${platform.name}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <!-- 提示词选择器独立区域 -->
+                    <div class="prompt-selector-container border border-gray-200 rounded-lg p-3 bg-gray-50 hover:bg-gray-100 transition-colors" data-platform-id="${platform.id}">
+                      <div class="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          id="prompt-${platform.id}"
+                          class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 focus:ring-2 prompt-checkbox"
+                          data-platform-id="${platform.id}"
+                        />
+                        <span
+                          class="text-xs text-gray-600 cursor-pointer hover:text-blue-600 transition-colors prompt-label whitespace-nowrap"
+                          data-platform-id="${platform.id}"
+                        >
+                          无模板
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -4005,6 +5189,112 @@ function addPageStyles() {
           max-width: 100%;
         }
       }
+
+      /* 提示词选择器样式 */
+      .prompt-selector-container {
+        position: relative;
+      }
+
+      .prompt-checkbox {
+        flex-shrink: 0;
+      }
+
+      .prompt-label {
+        font-size: 0.75rem;
+        white-space: nowrap;
+        max-width: 80px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .prompt-popup {
+        background: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        z-index: 1000;
+        animation: fadeIn 0.2s ease-out;
+        width: 320px;
+        height: 240px;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .prompt-popup-wrapper {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .prompt-popup-content {
+        flex: 1;
+        overflow-y: auto;
+        max-height: calc(240px - 60px); /* 减去底部按钮区域的高度 */
+      }
+
+      .prompt-popup-footer {
+        flex-shrink: 0;
+        background: white;
+        border-radius: 0 0 12px 12px;
+      }
+
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(-10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+
+
+      .prompt-item {
+        border-radius: 4px;
+        transition: background-color 0.15s ease;
+      }
+
+      .prompt-item:hover {
+        background-color: #f9fafb;
+      }
+
+      .remove-prompt-btn {
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: #ef4444;
+        color: white;
+        border: none;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        line-height: 1;
+        transition: background-color 0.15s ease;
+      }
+
+      .remove-prompt-btn:hover {
+        background: #dc2626;
+      }
+
+      .add-prompt-btn {
+        transition: all 0.15s ease;
+      }
+
+      .add-prompt-btn:hover {
+        background-color: #dbeafe;
+        border-color: #3b82f6;
+      }
+
+      /* 响应式调整 */
+      @media (max-width: 768px) {
+        .prompt-selector-container {
+          display: none;
+        }
+      }
     `;
     document.head.appendChild(style);
   }
@@ -4307,16 +5597,36 @@ function renderPlatformList() {
 
   // 生成平台列表HTML
   const platformListHTML = platformsToShow.map(platform => `
-    <div class="flex items-center p-4 border border-gray-200 rounded-lg hover:border-blue-300 transition-colors cursor-pointer platform-item" data-platform-id="${platform.id}">
-      <input
-        type="checkbox"
-        id="platform-${platform.id}"
-        class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
-      />
-      <div class="ml-4 flex-1">
-        <div class="flex items-center">
-          ${generatePlatformLogoHTML(platform)}
-          <span class="text-sm font-medium text-gray-900">${platform.name}</span>
+    <div class="flex items-center space-x-3">
+      <!-- 平台选择区域 -->
+      <div class="flex-1 flex items-center p-4 border border-gray-200 rounded-lg hover:border-blue-300 transition-colors cursor-pointer platform-item" data-platform-id="${platform.id}">
+        <input
+          type="checkbox"
+          id="platform-${platform.id}"
+          class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+        />
+        <div class="ml-4 flex-1">
+          <div class="flex items-center">
+            ${generatePlatformLogoHTML(platform)}
+            <span class="text-sm font-medium text-gray-900">${platform.name}</span>
+          </div>
+        </div>
+      </div>
+      <!-- 提示词选择器独立区域 -->
+      <div class="prompt-selector-container border border-gray-200 rounded-lg p-3 bg-gray-50 hover:bg-gray-100 transition-colors" data-platform-id="${platform.id}">
+        <div class="flex items-center space-x-2">
+          <input
+            type="checkbox"
+            id="prompt-${platform.id}"
+            class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 focus:ring-2 prompt-checkbox"
+            data-platform-id="${platform.id}"
+          />
+          <span
+            class="text-xs text-gray-600 cursor-pointer hover:text-blue-600 transition-colors prompt-label whitespace-nowrap"
+            data-platform-id="${platform.id}"
+          >
+            无模板
+          </span>
         </div>
       </div>
     </div>
@@ -4334,9 +5644,13 @@ function renderPlatformList() {
 
 // 重新绑定平台事件监听器
 function rebindPlatformEvents(platforms) {
+  // 清除DOM缓存，因为平台列表可能已重新渲染
+  promptDOMCache.invalidateCache();
+
   platforms.forEach(platform => {
     const checkbox = document.getElementById(`platform-${platform.id}`);
-    const platformItem = document.querySelector(`[data-platform-id="${platform.id}"]`);
+    // 修复：明确选择平台选择区域（第一个具有该属性的元素）
+    const platformItem = document.querySelector(`.platform-item[data-platform-id="${platform.id}"]`);
 
     if (checkbox) {
       // 移除旧的事件监听器（如果存在）
@@ -4345,6 +5659,9 @@ function rebindPlatformEvents(platforms) {
       checkbox._toggleHandler = () => togglePlatform(platform);
       checkbox.addEventListener('change', checkbox._toggleHandler);
     }
+
+    // 绑定提示词选择器事件
+    bindPromptSelectorEvents(platform);
 
     if (platformItem) {
       // 移除旧的事件监听器（如果存在）
@@ -4786,6 +6103,10 @@ function bindEventListeners() {
 
   // 初始化平台选择事件（使用统一的绑定函数）
   rebindPlatformEvents(SUPPORTED_PLATFORMS);
+
+  // 初始化提示词选择器功能
+  initializePlatformPromptConfig();
+  setupPromptHelperMessageListener();
 }
 
 // 页面初始化

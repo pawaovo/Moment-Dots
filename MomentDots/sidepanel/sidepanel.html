@@ -64,12 +64,28 @@
       animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
     }
 
+    /* 优化中动画 */
+    .status-optimizing {
+      animation: optimizing-pulse 2s ease-in-out infinite;
+    }
+
     @keyframes pulse {
       0%, 100% {
         opacity: 1;
       }
       50% {
         opacity: .5;
+      }
+    }
+
+    @keyframes optimizing-pulse {
+      0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+      }
+      50% {
+        opacity: 0.6;
+        transform: scale(1.1);
       }
     }
 
@@ -136,6 +152,9 @@
   </div>
   
   <!-- 应用脚本 -->
+  <!-- 优化工具类 -->
+  <script src="../shared/utils/PlatformUtils.js"></script>
+  <script src="../shared/utils/MessageManager.js"></script>
   <script src="../shared/config/platforms.js"></script>
   <script src="../shared/utils/storage.js"></script>
   <script src="../shared/services/LogoCacheManager.js"></script>
