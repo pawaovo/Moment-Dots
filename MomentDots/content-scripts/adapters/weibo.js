@@ -1125,6 +1125,18 @@ class WeiboAdapter {
       allFiles.push(...data.videos);
     }
 
+    // 特别处理：如果没有找到任何文件，但当前是短视频内容类型，记录调试信息
+    if (allFiles.length === 0 && data.contentType === '短视频') {
+      this.log('⚠️ 短视频内容类型但未找到文件数据，调试信息:', {
+        hasImages: !!(data.images && data.images.length > 0),
+        hasFiles: !!(data.files && data.files.length > 0),
+        hasVideos: !!(data.videos && data.videos.length > 0),
+        contentType: data.contentType,
+        dataKeys: Object.keys(data)
+      });
+    }
+
+    this.log('传统文件收集完成，总文件数:', allFiles.length);
     return allFiles;
   }
 

@@ -129,7 +129,10 @@ class BackgroundFileService {
       session.receivedChunks.set(chunkIndex, uint8Array);
       session.receivedCount++;
 
-      console.log(`Received chunk ${chunkIndex} for ${fileId} (${uint8Array.length} bytes, ${session.receivedCount}/${session.totalChunks})`);
+      // 只在最后一个分块时输出日志
+      if (isLastChunk || session.receivedCount === session.totalChunks) {
+        console.log(`Received final chunk for ${fileId} (${session.receivedCount}/${session.totalChunks} chunks)`);
+      }
 
       // 检查是否所有分块都已接收
       if (session.receivedCount === session.totalChunks || isLastChunk) {
@@ -961,12 +964,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 
   if (message.action === 'uploadFileChunk') {
-    console.log('Processing uploadFileChunk request:', {
-      fileId: message.fileId,
-      chunkIndex: message.chunkIndex,
-      chunkSize: message.chunkData ? message.chunkData.length : 0,
-      isLastChunk: message.isLastChunk
-    });
     try {
       if (!backgroundFileService) {
         throw new Error('BackgroundFileService not initialized');
@@ -978,7 +975,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         message.chunkData,
         message.isLastChunk
       );
-      console.log('File chunk uploaded successfully:', result);
       sendResponse({ success: true, result: result });
     } catch (error) {
       console.error('Failed to upload file chunk:', error);

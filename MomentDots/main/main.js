@@ -365,6 +365,9 @@ class ShortVideoStateManager {
    * @param {string} message - 成功消息
    */
   static handleUploadSuccess(data, type, message) {
+    // 确保当前内容类型保持为短视频，防止意外切换
+    const originalContentType = appState.currentContentType;
+
     if (type === 'video') {
       appState.shortVideoPreviews.push(data);
       updateShortVideoPreview();
@@ -374,8 +377,27 @@ class ShortVideoStateManager {
     }
 
     updateShortVideoCount();
-    debouncedSaveToStorage();
+
+    // 确保内容类型没有被意外更改
+    if (appState.currentContentType !== originalContentType) {
+      console.warn('⚠️ 检测到内容类型意外变化，正在恢复:', originalContentType);
+      appState.currentContentType = originalContentType;
+    }
+
+    // 使用专门的短视频状态保存函数，避免触发页面切换
+    this.saveShortVideoState();
     showNotification(message, 'success');
+  }
+
+  /**
+   * 专门的短视频状态保存函数
+   * 避免触发完整的UI更新和页面切换
+   */
+  static saveShortVideoState() {
+    // 直接调用存储保存，不使用防抖，确保状态立即保存
+    saveToStorageData().catch(error => {
+      console.error('短视频状态保存失败:', error);
+    });
   }
 
 
@@ -745,23 +767,43 @@ class MainPageController {
   constructor() {
     this.fileManager = null;
     this.memoryManager = null;
-    this.initServices();
+    this.useChunkedTransfer = false; // 默认为false，等待异步初始化
+    this.isInitialized = false;
+    this.initPromise = this.initServices(); // 保存初始化Promise
   }
 
   // 初始化服务
   async initServices() {
     try {
-      // 测试Background Script连接
-      const testResponse = await chrome.runtime.sendMessage({
-        action: 'getStorageStats'
-      });
+      // 添加重试机制的Background Script连接测试
+      let testResponse = null;
+      let retryCount = 0;
+      const maxRetries = 3;
 
-      if (testResponse && testResponse.success) {
-        console.log('Background Script connection successful');
-        this.useChunkedTransfer = true;
-      } else {
-        console.warn('Background Script connection failed, using legacy mode');
-        this.useChunkedTransfer = false;
+      while (retryCount < maxRetries && !testResponse?.success) {
+        try {
+          testResponse = await chrome.runtime.sendMessage({
+            action: 'getStorageStats'
+          });
+
+          if (testResponse && testResponse.success) {
+            console.log('Background Script connection successful');
+            this.useChunkedTransfer = true;
+            break;
+          }
+        } catch (error) {
+          console.warn(`Background Script connection attempt ${retryCount + 1} failed:`, error.message);
+        }
+
+        retryCount++;
+        if (retryCount < maxRetries) {
+          // 等待一段时间后重试
+          await new Promise(resolve => setTimeout(resolve, 500 * retryCount));
+        }
+      }
+
+      if (!this.useChunkedTransfer) {
+        console.warn('Background Script connection failed after retries, using legacy mode');
       }
 
       // 初始化FileManager作为降级方案
@@ -776,20 +818,33 @@ class MainPageController {
         this.fileManager = null;
       }
 
+      this.isInitialized = true;
       console.log('Services initialized successfully', {
         chunkedTransfer: this.useChunkedTransfer,
-        fileManager: !!this.fileManager
+        fileManager: !!this.fileManager,
+        retryCount: retryCount
       });
     } catch (error) {
       console.error('Failed to initialize services:', error);
       this.useChunkedTransfer = false;
       this.fileManager = null;
+      this.isInitialized = true; // 即使失败也标记为已初始化
+    }
+  }
+
+  // 确保服务已初始化的辅助方法
+  async ensureInitialized() {
+    if (!this.isInitialized) {
+      await this.initPromise;
     }
   }
 
   // 处理文件选择 - 智能选择传输方案
   async handleFileSelection(files) {
     try {
+      // 确保服务已初始化
+      await this.ensureInitialized();
+
       // 检查图片数量限制（累积计算）
       const remainingSlots = IMAGE_CONFIG.maxImages - appState.imagePreviews.length;
       if (remainingSlots <= 0) {
@@ -807,13 +862,10 @@ class MainPageController {
       uploadLoadingManager.show(filesToProcess.length);
 
       if (this.useChunkedTransfer) {
-        console.log('Processing files using chunked transfer...');
         return await this.handleFileSelectionChunked(filesToProcess);
       } else if (this.fileManager) {
-        console.log('Processing files using FileManager...');
         return await this.handleFileSelectionFileManager(filesToProcess);
       } else {
-        console.log('Processing files using legacy method...');
         return this.handleFileSelectionLegacy(filesToProcess);
       }
     } catch (error) {
@@ -830,6 +882,9 @@ class MainPageController {
   // 视频文件选择处理
   async handleVideoSelection(files) {
     try {
+      // 确保服务已初始化
+      await this.ensureInitialized();
+
       // 检查是否超过最大视频数量
       const remainingSlots = VIDEO_CONFIG.maxVideos - appState.videoPreviews.length;
       if (remainingSlots <= 0) {
@@ -904,8 +959,6 @@ class MainPageController {
           continue;
         }
 
-        console.log(`Starting chunked upload for video: ${file.name} (${file.size} bytes)`);
-
         // 使用分块传输上传视频文件
         const fileId = await this.uploadFileInChunks(file);
 
@@ -913,9 +966,7 @@ class MainPageController {
           // 创建预览数据
           const preview = this.createVideoPreviewData(file, fileId);
           previews.push(preview);
-          console.log(`Video uploaded successfully: ${file.name} -> ${fileId}`);
         } else {
-          console.error('Failed to upload video:', file.name);
           FileErrorHandler.handleFileError('视频上传失败', file.name, '视频上传');
         }
 
@@ -991,8 +1042,6 @@ class MainPageController {
           continue;
         }
 
-        console.log(`Starting chunked upload for: ${file.name} (${file.size} bytes)`);
-
         // 使用分块传输上传文件
         const fileId = await this.uploadFileInChunks(file);
 
@@ -1008,9 +1057,7 @@ class MainPageController {
           };
 
           previews.push(preview);
-          console.log(`File uploaded successfully: ${file.name} -> ${fileId}`);
         } else {
-          console.error('Failed to upload file:', file.name);
           FileErrorHandler.handleFileError('文件上传失败', file.name, '文件上传');
         }
 
@@ -1034,7 +1081,7 @@ class MainPageController {
       // 显示成功提示
       showNotification(`成功处理 ${previews.length} 个文件`, 'success');
 
-      console.log(`Successfully processed ${previews.length} files using chunked transfer`);
+
     }
   }
 
@@ -1062,16 +1109,14 @@ class MainPageController {
     // 隐藏加载状态
     uploadLoadingManager.hide();
 
-    console.log(`Successfully processed ${previews.length} files using FileManager`);
+
   }
 
   // 分块上传文件
   async uploadFileInChunks(file) {
     try {
-      const chunkSize = 5 * 1024 * 1024; // 5MB per chunk
+      const chunkSize = 16 * 1024 * 1024; // 16MB per chunk - 优化传输效率
       const totalChunks = Math.ceil(file.size / chunkSize);
-
-      console.log(`Uploading ${file.name} in ${totalChunks} chunks of ${chunkSize} bytes each`);
 
       // 1. 初始化文件上传
       const initResponse = await chrome.runtime.sendMessage({
@@ -1090,7 +1135,6 @@ class MainPageController {
       }
 
       const fileId = initResponse.fileId;
-      console.log(`File upload initialized: ${fileId}`);
 
       // 2. 分块读取和上传
       for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
@@ -1104,8 +1148,6 @@ class MainPageController {
         // 转换为Uint8Array以便JSON序列化
         const uint8Array = new Uint8Array(arrayBuffer);
         const chunkData = Array.from(uint8Array);
-
-        console.log(`Uploading chunk ${chunkIndex + 1}/${totalChunks} (${chunkData.length} bytes)`);
 
         // 上传分块
         const chunkResponse = await chrome.runtime.sendMessage({
@@ -1121,7 +1163,6 @@ class MainPageController {
         }
       }
 
-      console.log(`File upload completed: ${fileId}`);
       return fileId;
 
     } catch (error) {
@@ -1215,9 +1256,21 @@ async function loadFromStorageData() {
     appState.videoPreviews = data.videoPreviews || []; // 支持视频数据
     appState.shortVideoPreviews = data.shortVideoPreviews || []; // 加载短视频数据
     appState.shortVideoCovers = data.shortVideoCovers || []; // 加载短视频封面数据
-    appState.currentContentType = data.currentContentType || '动态'; // 加载内容类型
+    // 智能内容类型管理：如果当前已经是短视频模式且正在上传，保持当前状态
+    const isShortVideoUploading = appState.currentContentType === '短视频' &&
+                                  (appState.shortVideoPreviews?.length > 0 || appState.shortVideoCovers?.length > 0);
+
+    if (isShortVideoUploading && data.currentContentType === '短视频') {
+      // 保持短视频模式，不切换
+      console.log('🔒 保持短视频模式，避免上传过程中的页面切换');
+    } else {
+      appState.currentContentType = data.currentContentType || '动态'; // 加载内容类型
+    }
+
     appState.articleData = data.articleData || {}; // 加载文章相关数据
-    updateUI();
+
+    // 如果正在短视频上传过程中，跳过内容类型更新以避免页面切换
+    updateUI(isShortVideoUploading);
   } catch (error) {
     console.error('Failed to load from storage:', error);
   }
@@ -1225,6 +1278,34 @@ async function loadFromStorageData() {
 
 // 重置应用状态到初始值
 function resetAppState() {
+  // 清理图片URL对象
+  appState.imagePreviews.forEach(image => {
+    if (image.dataUrl && image.dataUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(image.dataUrl);
+    }
+  });
+
+  // 清理视频URL对象
+  appState.videoPreviews.forEach(video => {
+    if (video.dataUrl && video.dataUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(video.dataUrl);
+    }
+  });
+
+  // 清理短视频URL对象
+  appState.shortVideoPreviews.forEach(video => {
+    if (video.dataUrl && video.dataUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(video.dataUrl);
+    }
+  });
+
+  // 清理短视频封面URL对象
+  appState.shortVideoCovers.forEach(cover => {
+    if (cover.dataUrl && cover.dataUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(cover.dataUrl);
+    }
+  });
+
   appState.title = '';
   appState.content = '';
   appState.selectedPlatforms = [];
@@ -1300,18 +1381,15 @@ async function initializePageData() {
     const loadType = getPageLoadType();
     console.log('页面加载类型:', loadType);
 
-    // 根据加载类型执行相应的初始化策略
-    switch (loadType) {
-      case 'refresh':
-        await handlePageRefreshInit();
-        break;
-      case 'extension_open':
-        await handleExtensionOpenInit();
-        break;
-      default:
-        await handleNormalPageInit();
-        break;
-    }
+    // 所有加载类型都执行相同的重置操作
+    const sourceMap = {
+      'refresh': '页面刷新',
+      'extension_open': '扩展程序图标打开',
+      'default': '新打开页面'
+    };
+
+    const source = sourceMap[loadType] || sourceMap['default'];
+    await handleSafeStateReset(source);
 
     updateUI();
   } catch (error) {
@@ -1322,54 +1400,32 @@ async function initializePageData() {
   }
 }
 
-// 页面刷新初始化处理 - 修复：保留用户数据
-async function handlePageRefreshInit() {
-  await handleDataPreservingInit('页面刷新');
-}
 
-// 扩展程序打开初始化处理 - 修复：智能数据保护
-async function handleExtensionOpenInit() {
-  const hasUserInput = await checkForUserInput();
 
-  if (hasUserInput) {
-    await handleDataPreservingInit('扩展程序图标打开');
-  } else {
-    await performStateReset('extensionOpened', true);
-    console.log('扩展程序图标打开：已重置所有状态');
-  }
-}
+// 安全的状态重置处理（避免消息通道错误）
+async function handleSafeStateReset(source) {
+  try {
+    console.log(`${source}：开始重置页面状态`);
 
-// 统一的数据保护初始化处理
-async function handleDataPreservingInit(source) {
-  await clearPublishResults(); // 使用默认参数，普通清理模式
-  await loadFromStorageData();
-  console.log(`${source}：已保留用户数据，清理发布状态`);
-}
+    // 1. 清理本地存储数据
+    await clearStorageKeys(['publishData', 'publishResults']);
 
-// 普通页面打开初始化处理
-async function handleNormalPageInit() {
-  await loadFromStorageData();
-  console.log('新打开页面：已加载保存的数据');
-}
+    // 2. 重置应用状态
+    resetAppState();
 
-// 统一的状态重置处理函数
-async function performStateReset(actionType, clearStorage = false) {
-  // 清空临时数据并重置状态
-  await clearTemporaryData();
-  resetAppState();
+    // 3. 不调用可能导致消息通道错误的后台脚本通信
+    // 避免在页面刷新/打开时立即与后台脚本通信
 
-  // 可选：清空用户输入数据（注意：clearTemporaryData已经清理了publishData）
-  if (clearStorage) {
+    console.log(`${source}：页面状态已重置`);
+  } catch (error) {
+    console.warn(`${source} 状态重置过程中出现错误:`, error);
+    // 即使清理失败，也要确保应用状态被重置
     try {
-      // clearTemporaryData() 已经清理了 publishData，这里只是确保清理完整
-      console.log('已清空存储的发布数据');
-    } catch (error) {
-      console.warn('清空存储数据失败:', error.message);
+      resetAppState();
+    } catch (resetError) {
+      console.error('重置应用状态失败:', resetError);
     }
   }
-
-  // 通知后台脚本处理侧边栏
-  await notifyBackgroundScript(actionType);
 }
 
 // 统一的后台脚本通知函数
@@ -1385,7 +1441,7 @@ async function notifyBackgroundScript(actionType) {
       console.warn('后台脚本响应异常:', response.error);
     }
   } catch (error) {
-    // 改进错误处理，区分不同类型的通信错误
+    // 简化错误处理，只记录日志
     if (error.message.includes('message channel closed')) {
       console.warn('消息通道已关闭，这可能是正常的清理过程');
     } else if (error.message.includes('Extension context invalidated')) {
@@ -1396,22 +1452,9 @@ async function notifyBackgroundScript(actionType) {
   }
 }
 
-// 检查是否有用户输入数据需要保护
-async function checkForUserInput() {
-  try {
-    const data = await loadPublishData();
-    // 检查是否有标题或内容输入
-    const hasTitle = data.title && data.title.trim().length > 0;
-    const hasContent = data.content && data.content.trim().length > 0;
-    const hasMedia = (data.imagePreviews && data.imagePreviews.length > 0) ||
-                     (data.videoPreviews && data.videoPreviews.length > 0);
 
-    return hasTitle || hasContent || hasMedia;
-  } catch (error) {
-    console.warn('检查用户输入失败:', error);
-    return false;
-  }
-}
+
+
 
 // 统一的发布状态清理函数 - 优化合并重复逻辑
 async function clearPublishResults(options = {}) {
@@ -1874,12 +1917,99 @@ class UploadLoadingManager {
 
   // 初始化DOM元素引用
   initElements() {
-    this.loadingContainer = document.getElementById('upload-loading');
+    // 根据当前页面类型选择合适的加载容器
+    this.loadingContainer = this.findAppropriateLoadingContainer();
+
+    // 如果找不到加载容器，尝试在当前页面创建一个
+    if (!this.loadingContainer) {
+      this.createTemporaryLoadingContainer();
+    }
+  }
+
+  // 查找合适的加载容器
+  findAppropriateLoadingContainer() {
+    // 根据页面类型选择容器ID
+    const containerId = appState.currentContentType === '短视频'
+      ? 'short-video-upload-loading'
+      : 'upload-loading';
+
+    const container = document.getElementById(containerId);
+    if (container) {
+      return container;
+    }
+
+    // 如果短视频容器不存在，尝试通用容器作为后备
+    if (containerId === 'short-video-upload-loading') {
+      return document.getElementById('upload-loading');
+    }
+
+    return null;
+  }
+
+  // 创建临时加载状态容器
+  createTemporaryLoadingContainer() {
+    const isShortVideo = appState.currentContentType === '短视频';
+
+    // 选择父容器
+    const parentContainer = this.findParentContainer(isShortVideo);
+    if (!parentContainer) return;
+
+    // 创建容器
+    const tempContainer = this.createLoadingElement(isShortVideo);
+
+    // 确保父容器有相对定位（短视频页面需要）
+    if (isShortVideo && parentContainer.style.position !== 'relative') {
+      parentContainer.style.position = 'relative';
+    }
+
+    parentContainer.appendChild(tempContainer);
+    this.loadingContainer = tempContainer;
+  }
+
+  // 查找父容器
+  findParentContainer(isShortVideo) {
+    if (isShortVideo) {
+      return document.querySelector('#video-upload-area') ||
+             document.querySelector('.short-video-upload-container') ||
+             document.querySelector('#short-video-upload-area');
+    } else {
+      return document.querySelector('.image-upload-container') ||
+             document.querySelector('.content-area');
+    }
+  }
+
+  // 创建加载元素
+  createLoadingElement(isShortVideo) {
+    const tempContainer = document.createElement('div');
+    tempContainer.innerHTML = '<div class="simple-loading-spinner"></div>';
+    tempContainer.style.display = 'none';
+
+    if (isShortVideo) {
+      tempContainer.id = 'short-video-upload-loading';
+      tempContainer.style.cssText += `
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 20;
+        background-color: rgba(255, 255, 255, 0.95);
+        border-radius: 50%;
+        padding: 12px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        pointer-events: none;
+      `;
+    } else {
+      tempContainer.id = 'upload-loading';
+      tempContainer.className = 'smart-upload-loading';
+    }
+
+    return tempContainer;
   }
 
   // 显示加载状态
   show(totalFiles) {
-    if (!this.loadingContainer) this.initElements();
+    // 强制重新初始化，确保找到正确的容器
+    this.initElements();
 
     // 清除可能存在的隐藏定时器
     if (this.hideTimer) {
@@ -2528,6 +2658,14 @@ async function buildPublishDataStructure(title, content, useFileIds = false, pla
     videos = [...(appState.shortVideoPreviews || [])];
     images = [...(appState.shortVideoCovers || [])];
     allFiles = [...videos, ...images];
+
+    console.log('📁 短视频文件数据收集:', {
+      shortVideoPreviews: appState.shortVideoPreviews?.length || 0,
+      shortVideoCovers: appState.shortVideoCovers?.length || 0,
+      totalVideos: videos.length,
+      totalImages: images.length,
+      totalFiles: allFiles.length
+    });
   } else {
     // 动态/文章模式：使用原有数据
     images = appState.imagePreviews || [];
@@ -2780,7 +2918,7 @@ async function executePublish(publishData) {
 
 
 // UI更新函数
-function updateUI() {
+function updateUI(skipContentTypeUpdate = false) {
   const titleInput = domCache.get('title-input');
   const contentTextarea = domCache.get('content-textarea');
 
@@ -2809,8 +2947,13 @@ function updateUI() {
   }
   if (articleRichEditor) articleRichEditor.innerHTML = appState.content;
 
-  // 更新内容类型按钮状态和页面区域
-  updateContentTypeButtons(true);
+  // 更新内容类型按钮状态和页面区域（可选跳过以防止意外切换）
+  if (!skipContentTypeUpdate) {
+    updateContentTypeButtons(true);
+  } else {
+    // 只更新按钮状态，不更新页面区域
+    updateContentTypeButtons(false);
+  }
 
   // 渲染平台列表（基于当前内容类型）
   renderPlatformList();
@@ -3006,11 +3149,23 @@ function updateMediaPreview(mediaType, mediaArray, createElementFn, getContainer
 function removeImage(imageId) {
   Utils.safeExecute(() => {
     if (imageId === undefined) {
-      // 删除所有图片
+      // 删除所有图片 - 先释放URL对象
+      appState.imagePreviews.forEach(image => {
+        if (image.dataUrl && image.dataUrl.startsWith('blob:')) {
+          URL.revokeObjectURL(image.dataUrl);
+        }
+      });
       appState.imagePreviews = [];
     } else {
       // 删除指定ID的图片
       const initialLength = appState.imagePreviews.length;
+      const imageToRemove = appState.imagePreviews.find(img => img.id === imageId);
+
+      // 释放URL对象
+      if (imageToRemove && imageToRemove.dataUrl && imageToRemove.dataUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(imageToRemove.dataUrl);
+      }
+
       appState.imagePreviews = appState.imagePreviews.filter(img => img.id !== imageId);
 
       // 验证删除是否成功
@@ -3079,7 +3234,7 @@ function removeVideo(videoId) {
     if (videoId === undefined) {
       // 删除所有视频
       appState.videoPreviews.forEach(video => {
-        if (video.dataUrl) {
+        if (video.dataUrl && video.dataUrl.startsWith('blob:')) {
           URL.revokeObjectURL(video.dataUrl);
         }
       });
@@ -3092,7 +3247,7 @@ function removeVideo(videoId) {
 
       console.log(`[DEBUG] 找到要删除的视频:`, videoToRemove ? { id: videoToRemove.id, name: videoToRemove.name } : 'null');
 
-      if (videoToRemove && videoToRemove.dataUrl) {
+      if (videoToRemove && videoToRemove.dataUrl && videoToRemove.dataUrl.startsWith('blob:')) {
         URL.revokeObjectURL(videoToRemove.dataUrl);
       }
 
@@ -3152,9 +3307,16 @@ function formatFileSize(bytes) {
 
 // 清空所有媒体文件（图片和视频）
 function clearAllImages() {
+  // 清理图片的URL对象
+  appState.imagePreviews.forEach(image => {
+    if (image.dataUrl && image.dataUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(image.dataUrl);
+    }
+  });
+
   // 清理视频的URL对象
   appState.videoPreviews.forEach(video => {
-    if (video.dataUrl) {
+    if (video.dataUrl && video.dataUrl.startsWith('blob:')) {
       URL.revokeObjectURL(video.dataUrl);
     }
   });
@@ -4368,12 +4530,32 @@ function addPageStyles() {
         grid-template-columns: 1fr 1fr;
         gap: 1.5rem;
         margin-top: 1rem;
+        position: relative; /* 为加载动画提供定位基准 */
+      }
+
+      /* 短视频专用加载状态样式 */
+      #short-video-upload-area {
+        position: relative; /* 为加载动画提供定位基准 */
+      }
+
+      #short-video-upload-loading {
+        position: absolute;
+        top: 50%; /* 居中定位 */
+        left: 50%;
+        transform: translate(-50%, -50%); /* 完全居中 */
+        z-index: 20; /* 确保在最上层 */
+        background-color: rgba(255, 255, 255, 0.95);
+        border-radius: 50%;
+        padding: 12px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        pointer-events: none;
       }
 
       .video-upload-section {
         display: flex;
         flex-direction: column;
         gap: 1rem;
+        position: relative; /* 为视频上传区域内的加载动画提供定位基准 */
       }
 
       .cover-upload-section {
@@ -5441,6 +5623,10 @@ function createShortVideoUploadArea() {
               accept="video/mp4,video/mov,video/avi,video/webm"
               class="hidden"
             />
+            <!-- 视频上传专用加载状态 -->
+            <div id="short-video-upload-loading" style="display: none;">
+              <div class="simple-loading-spinner"></div>
+            </div>
           </div>
         </div>
 
@@ -5488,6 +5674,8 @@ function createShortVideoUploadArea() {
         </div>
       </div>
 
+
+
       <!-- 格式支持说明 -->
       <p class="mt-2 text-xs text-gray-500">
         图片：支持 JPG、PNG、GIF、WebP 格式&nbsp;&nbsp;&nbsp;&nbsp;视频：支持 MP4、MOV、AVI、WebM 格式
@@ -5515,25 +5703,33 @@ async function handleShortVideoFileUpload(file, fileType, additionalData = {}) {
   try {
     let fileData;
 
-    if (mainController && mainController.useChunkedTransfer) {
-      // 使用分块传输
-      try {
-        console.log(`Starting chunked upload for ${fileType}: ${file.name} (${file.size} bytes)`);
+    if (mainController) {
+      // 确保mainController已初始化
+      await mainController.ensureInitialized();
 
-        const fileId = await mainController.uploadFileInChunks(file);
+      if (mainController.useChunkedTransfer) {
+        // 使用分块传输
+        try {
+          const fileId = await mainController.uploadFileInChunks(file);
 
-        if (fileId) {
-          fileData = createShortVideoFileData(file, fileId, additionalData);
-          console.log(`${fileType} uploaded successfully: ${file.name} -> ${fileId}`);
-        } else {
-          throw new Error(`Failed to upload ${fileType}`);
+          if (fileId) {
+            fileData = createShortVideoFileData(file, fileId, additionalData);
+            console.log(`✅ 短视频文件上传成功 (新系统): ${file.name} -> ${fileId}`);
+          } else {
+            throw new Error(`Failed to upload ${fileType}`);
+          }
+        } catch (error) {
+          console.error('Chunked upload failed, using fallback:', error);
+          fileData = createShortVideoFileData(file, null, additionalData);
         }
-      } catch (error) {
-        console.error('Chunked upload failed, using fallback:', error);
+      } else {
+        // 降级方案
+        console.log(`⚠️ 短视频文件上传 (传统系统): ${file.name}`);
         fileData = createShortVideoFileData(file, null, additionalData);
       }
     } else {
-      // 降级方案
+      // 没有mainController，使用降级方案
+      console.warn('MainController not available, using fallback');
       fileData = createShortVideoFileData(file, null, additionalData);
     }
 
@@ -5737,6 +5933,12 @@ async function handleShortVideoUpload(event) {
 
   const file = files[0]; // 只取第一个文件
 
+  // 确保当前处于短视频模式
+  if (appState.currentContentType !== '短视频') {
+    appState.currentContentType = '短视频';
+    updateContentTypeButtons(true);
+  }
+
   // 验证视频文件（使用统一验证器）
   if (!FileValidator.validateFileWithNotification(file, 'video')) {
     return;
@@ -5744,6 +5946,9 @@ async function handleShortVideoUpload(event) {
 
   // 清空之前的视频（只允许一个视频）
   appState.shortVideoPreviews = [];
+
+  // 显示加载状态
+  uploadLoadingManager.show(1);
 
   try {
     // 使用统一的文件上传处理函数
@@ -5754,12 +5959,19 @@ async function handleShortVideoUpload(event) {
     if (videoData) {
       // 使用统一的状态管理
       ShortVideoStateManager.handleUploadSuccess(videoData, 'video', '视频上传成功');
-
-      // 添加调试日志
-      console.log('🎬 短视频上传完成，当前模式:', appState.currentContentType);
     }
+
+    // 更新加载进度
+    uploadLoadingManager.incrementProcessed();
   } catch (error) {
     Utils.handleError(error, '短视频上传失败');
+    // 即使失败也要更新进度以隐藏加载状态
+    uploadLoadingManager.incrementProcessed();
+  } finally {
+    // 清空文件输入，允许重复选择同一文件
+    if (event.target) {
+      event.target.value = '';
+    }
   }
 }
 
@@ -5783,6 +5995,9 @@ async function handleCoverUpload(event, coverType) {
   // 移除同类型的旧封面（每种类型只允许一个）
   appState.shortVideoCovers = appState.shortVideoCovers.filter(cover => cover.coverType !== coverType);
 
+  // 显示加载状态
+  uploadLoadingManager.show(1);
+
   try {
     // 使用统一的文件上传处理函数
     const coverData = await handleShortVideoFileUpload(file, `${coverType} cover`, {
@@ -5795,8 +6010,13 @@ async function handleCoverUpload(event, coverType) {
       const message = `${coverType === 'horizontal' ? '横' : '竖'}封面上传成功`;
       ShortVideoStateManager.handleUploadSuccess(coverData, 'cover', message);
     }
+
+    // 更新加载进度
+    uploadLoadingManager.incrementProcessed();
   } catch (error) {
     Utils.handleError(error, '封面上传失败');
+    // 即使失败也要更新进度以隐藏加载状态
+    uploadLoadingManager.incrementProcessed();
   }
 }
 
@@ -5845,11 +6065,20 @@ function updateShortVideoPreview() {
       />
     `;
 
-    // 重新绑定事件
-    const videoUpload = domCache.get('short-video-upload');
-    if (videoUpload) {
-      videoUpload.addEventListener('change', handleShortVideoUpload);
-    }
+    // 强制刷新DOM缓存并重新绑定事件
+    domCache.refresh('short-video-upload');
+    rebindShortVideoUploadEvent();
+  }
+}
+
+// 专门的短视频上传事件重绑定函数
+function rebindShortVideoUploadEvent() {
+  const videoUpload = domCache.get('short-video-upload');
+  if (videoUpload) {
+    // 移除可能存在的旧事件监听器（防止重复绑定）
+    videoUpload.removeEventListener('change', handleShortVideoUpload);
+    // 添加新的事件监听器
+    videoUpload.addEventListener('change', handleShortVideoUpload);
   }
 }
 
@@ -5941,15 +6170,28 @@ function removeShortVideo(videoId) {
   if (appState.shortVideoPreviews) {
     const videoIndex = appState.shortVideoPreviews.findIndex(video => video.id === videoId);
     if (videoIndex !== -1) {
+      console.log('🗑️ 删除短视频:', appState.shortVideoPreviews[videoIndex].name);
+
       // 释放URL对象
-      URL.revokeObjectURL(appState.shortVideoPreviews[videoIndex].dataUrl);
+      if (appState.shortVideoPreviews[videoIndex].dataUrl &&
+          appState.shortVideoPreviews[videoIndex].dataUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(appState.shortVideoPreviews[videoIndex].dataUrl);
+      }
       // 从数组中移除
       appState.shortVideoPreviews.splice(videoIndex, 1);
-      // 更新预览
+
+      // 更新预览（这会触发事件重绑定）
       updateShortVideoPreview();
+
       // 更新计数和显示通知
       updateShortVideoCount();
+
+      // 保存状态
+      ShortVideoStateManager.saveShortVideoState();
+
       showNotification('视频已删除', 'success');
+
+      console.log('✅ 短视频删除完成，上传功能已重新激活');
     }
   }
 }
@@ -5960,7 +6202,10 @@ function removeCover(coverId, coverType) {
     const coverIndex = appState.shortVideoCovers.findIndex(cover => cover.id === coverId);
     if (coverIndex !== -1) {
       // 释放URL对象
-      URL.revokeObjectURL(appState.shortVideoCovers[coverIndex].dataUrl);
+      if (appState.shortVideoCovers[coverIndex].dataUrl &&
+          appState.shortVideoCovers[coverIndex].dataUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(appState.shortVideoCovers[coverIndex].dataUrl);
+      }
       // 从数组中移除
       appState.shortVideoCovers.splice(coverIndex, 1);
       // 更新预览
@@ -6145,7 +6390,12 @@ async function initializePage() {
   // 初始化主控制器
   try {
     mainController = new MainPageController();
-    console.log('MainPageController initialized successfully');
+    // 等待异步初始化完成
+    await mainController.ensureInitialized();
+    console.log('MainPageController initialized successfully', {
+      useChunkedTransfer: mainController.useChunkedTransfer,
+      hasFileManager: !!mainController.fileManager
+    });
   } catch (error) {
     console.error('Failed to initialize MainPageController:', error);
     console.log('Falling back to legacy implementation');
