@@ -575,7 +575,7 @@ class DouyinAdapter extends DouyinDependencyManager.getBasePlatformAdapter() {
         try {
           for (const fileId of fileIds) {
             this.log(`🎬 请求文件: ${fileId}`);
-            const file = await this.getFileWithChunking(fileId);
+            const file = await this.getFileFromExtension(fileId);
             if (file && file instanceof File) {
               filesToProcess.push(file);
               this.log(`🎬 成功获取文件: ${file.name} (${file.size} bytes)`);
@@ -2119,28 +2119,6 @@ class DouyinAdapter extends DouyinDependencyManager.getBasePlatformAdapter() {
       super.logError(operation, error);
     }
   }
-
-  /**
-   * 支持分块传输的文件获取方法（代理到FileProcessorBase）
-   * @param {string} fileId - 文件ID
-   * @returns {Promise<File>} - 文件对象
-   */
-  async getFileWithChunking(fileId) {
-    try {
-      // 创建FileProcessorBase实例来处理分块传输
-      if (!this.fileProcessor) {
-        this.fileProcessor = new FileProcessorBase('douyin', {});
-      }
-
-      return await this.fileProcessor.getFileWithChunking(fileId);
-    } catch (error) {
-      this.logError('🎬 分块文件获取失败，降级到原有方法', error);
-      // 降级到原有方法
-      return await this.getFileFromExtension(fileId);
-    }
-  }
-
-  // 移除重复的分块传输实现方法 - 现在通过FileProcessorBase代理处理
 
   /**
    * 从扩展获取文件 - 支持新的Background Script文件管理系统

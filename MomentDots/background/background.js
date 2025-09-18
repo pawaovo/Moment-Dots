@@ -4,12 +4,6 @@ console.log('=== Background Script Starting ===');
 // 导入文章抓取服务
 importScripts('../shared/services/ArticleExtractorService.js');
 
-// 导入分块传输服务
-importScripts('../shared/services/ChunkTransferService.js');
-
-// 导入IndexedDB存储服务
-importScripts('../shared/services/FileStorageService.js');
-
 // 初始化提示词助手默认数据
 async function initializePromptData() {
   const defaultPromptData = {
@@ -72,78 +66,7 @@ class BackgroundFileService {
     this.fileStorage = new Map(); // 使用Map存储Blob对象
     this.fileMetadata = new Map(); // 存储文件元数据
     this.uploadSessions = new Map(); // 存储分块上传会话
-    this.chunkTransferService = new ChunkTransferService(); // 分块传输服务
-
-    // IndexedDB存储服务
-    this.indexedDBStorage = null;
-    this.initIndexedDBStorage();
-
-    // 分块信息缓存（避免重复计算）
-    this.chunkInfoCache = new Map();
-
     console.log('BackgroundFileService initialized with chunked transfer support');
-  }
-
-  // 初始化IndexedDB存储服务
-  async initIndexedDBStorage() {
-    try {
-      // 由于在Service Worker中，我们需要直接实例化FileStorageService
-      // 首先检查FileStorageService是否已加载
-      if (typeof FileStorageService !== 'undefined') {
-        this.indexedDBStorage = new FileStorageService({
-          dbName: 'MomentDotsFiles',
-          version: 1,
-          storeName: 'files'
-        });
-        await this.indexedDBStorage.init();
-        console.log('✅ IndexedDB storage service initialized');
-      } else {
-        console.warn('⚠️ FileStorageService not available, using fallback storage');
-      }
-    } catch (error) {
-      console.error('❌ Failed to initialize IndexedDB storage:', error);
-    }
-  }
-
-  // 存储文件到IndexedDB（新方案）
-  async storeFileToIndexedDB(file) {
-    try {
-      if (!this.indexedDBStorage) {
-        await this.initIndexedDBStorage();
-      }
-
-      if (!this.indexedDBStorage) {
-        // 降级到内存存储
-        console.warn('⚠️ IndexedDB not available, using memory storage');
-        return this.storeFile(file);
-      }
-
-      // 使用真正的IndexedDB存储
-      const fileId = await this.indexedDBStorage.storeFile(file, {
-        uploadTime: Date.now(),
-        source: 'background_service'
-      });
-
-      // 只在内存中保存元数据引用（避免重复存储大文件）
-      this.fileMetadata.set(fileId, {
-        id: fileId,
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        lastModified: file.lastModified,
-        timestamp: Date.now(),
-        storageType: 'indexeddb'
-      });
-
-      console.log(`✅ File stored to IndexedDB: ${fileId} (${file.size} bytes)`);
-      return fileId;
-
-    } catch (error) {
-      console.error('❌ Failed to store file to IndexedDB:', error);
-      // 降级到内存存储
-      console.warn('⚠️ Falling back to memory storage');
-      return this.storeFile(file);
-    }
   }
 
   // 初始化文件上传会话
@@ -310,42 +233,24 @@ class BackgroundFileService {
     }
   }
 
-  // 获取文件（支持从IndexedDB获取）
-  async getFile(fileId) {
+  // 获取文件（返回Blob对象）
+  getFile(fileId) {
     try {
+      const blob = this.fileStorage.get(fileId);
       const metadata = this.fileMetadata.get(fileId);
 
-      if (!metadata) {
-        console.warn(`File metadata not found: ${fileId}`);
+      if (!blob || !metadata) {
+        console.warn(`File not found in background: ${fileId}`);
         return null;
       }
 
-      // 如果是IndexedDB存储的文件，从IndexedDB获取
-      if (metadata.storageType === 'indexeddb' && this.indexedDBStorage) {
-        const file = await this.indexedDBStorage.getFile(fileId);
-        if (file) {
-          console.log(`File retrieved from IndexedDB: ${fileId} (${file.size} bytes)`);
-          return {
-            blob: file,
-            metadata: metadata
-          };
-        }
-      }
-
-      // 降级到内存存储
-      const blob = this.fileStorage.get(fileId);
-      if (blob) {
-        console.log(`File retrieved from memory: ${fileId} (${blob.size} bytes)`);
-        return {
-          blob: blob,
-          metadata: metadata
-        };
-      }
-
-      console.warn(`File not found in any storage: ${fileId}`);
-      return null;
+      console.log(`File retrieved from background: ${fileId} (${blob.size} bytes)`);
+      return {
+        blob: blob,
+        metadata: metadata
+      };
     } catch (error) {
-      console.error('Failed to get file:', error);
+      console.error('Failed to get file from background:', error);
       return null;
     }
   }
@@ -361,122 +266,6 @@ class BackgroundFileService {
     } catch (error) {
       console.error('Failed to delete file from background:', error);
       return false;
-    }
-  }
-
-  // === 分块传输相关方法 ===
-
-  /**
-   * 检查文件是否需要分块传输
-   * @param {string} fileId - 文件ID
-   * @returns {Object} 检查结果
-   */
-  checkFileChunking(fileId) {
-    try {
-      const metadata = this.fileMetadata.get(fileId);
-      if (!metadata) {
-        return { needsChunking: false, error: 'File not found' };
-      }
-
-      const needsChunking = this.chunkTransferService.needsChunking(metadata.size);
-      return {
-        needsChunking: needsChunking,
-        fileSize: metadata.size,
-        threshold: this.chunkTransferService.LARGE_FILE_THRESHOLD
-      };
-    } catch (error) {
-      console.error('Failed to check file chunking:', error);
-      return { needsChunking: false, error: error.message };
-    }
-  }
-
-  /**
-   * 获取文件分块信息
-   * @param {string} fileId - 文件ID
-   * @returns {Object|null} 分块信息
-   */
-  async getFileChunkInfo(fileId) {
-    try {
-      // 检查缓存
-      if (this.chunkInfoCache.has(fileId)) {
-        return this.chunkInfoCache.get(fileId);
-      }
-
-      const metadata = this.fileMetadata.get(fileId);
-      if (!metadata) {
-        console.warn(`File metadata not found for chunk info: ${fileId}`);
-        return null;
-      }
-
-      // 获取文件（支持IndexedDB）
-      const fileResult = await this.getFile(fileId);
-      if (!fileResult) {
-        console.warn(`File not found for chunk info: ${fileId}`);
-        return null;
-      }
-
-      const blob = fileResult.blob;
-
-      if (!blob || !metadata) {
-        console.warn(`File not found for chunk info: ${fileId}`);
-        return null;
-      }
-
-      // 创建分块信息
-      const chunkInfo = this.chunkTransferService.createChunkInfo(blob);
-
-      const result = {
-        fileId: fileId,
-        fileName: metadata.name,
-        fileType: metadata.type,
-        fileSize: metadata.size,
-        chunkInfo: chunkInfo
-      };
-
-      // 缓存结果
-      this.chunkInfoCache.set(fileId, result);
-
-      return result;
-    } catch (error) {
-      console.error('Failed to get file chunk info:', error);
-      return null;
-    }
-  }
-
-  /**
-   * 获取指定分块
-   * @param {string} fileId - 文件ID
-   * @param {number} chunkIndex - 分块索引
-   * @returns {Promise<Object|null>} 分块数据
-   */
-  async getFileChunk(fileId, chunkIndex) {
-    try {
-      const metadata = this.fileMetadata.get(fileId);
-      if (!metadata) {
-        console.warn(`File metadata not found for chunk: ${fileId}`);
-        return null;
-      }
-
-      // 获取文件（支持IndexedDB）
-      const fileResult = await this.getFile(fileId);
-      if (!fileResult) {
-        console.warn(`File not found for chunk: ${fileId}`);
-        return null;
-      }
-
-      const blob = fileResult.blob;
-
-      // 创建分块信息
-      const chunkInfo = this.chunkTransferService.createChunkInfo(blob);
-
-      // 提取指定分块
-      const chunkData = await this.chunkTransferService.extractChunk(blob, chunkIndex, chunkInfo);
-
-      console.log(`Extracted chunk ${chunkIndex} for file ${fileId}: ${chunkData.size} bytes`);
-      return chunkData;
-    } catch (error) {
-      console.error(`Failed to get file chunk ${chunkIndex} for ${fileId}:`, error);
-      return null;
     }
   }
 
@@ -1194,7 +983,17 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true; // 保持消息通道开放
   }
 
-  // 移除重复的消息处理器 - 已合并到下方的IndexedDB存储处理器中
+  // 文件操作消息处理（兼容原有接口）
+  if (message.action === 'storeFile') {
+    try {
+      const fileId = backgroundFileService.storeFile(message.fileData);
+      sendResponse({ success: true, fileId: fileId });
+    } catch (error) {
+      console.error('Failed to store file:', error);
+      sendResponse({ success: false, error: error.message });
+    }
+    return true; // 保持消息通道开放
+  }
 
   if (message.action === 'getFile') {
     try {
@@ -1243,115 +1042,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       sendResponse({ success: deleted });
     } catch (error) {
       console.error('Failed to delete file:', error);
-      sendResponse({ success: false, error: error.message });
-    }
-    return true;
-  }
-
-  // === 直接文件存储（新方案）===
-
-  // 直接存储完整文件到IndexedDB
-  if (message.action === 'storeFile') {
-    try {
-      const fileData = message.fileData;
-
-      // 检查是否是File对象（直接传递）
-      if (fileData instanceof File) {
-        // 使用真正的IndexedDB存储
-        backgroundFileService.storeFileToIndexedDB(fileData)
-          .then(fileId => {
-            console.log(`✅ 文件已存储到IndexedDB: ${fileData.name} -> ${fileId}`);
-            sendResponse({ success: true, fileId: fileId });
-          })
-          .catch(error => {
-            console.error('Failed to store file to IndexedDB:', error);
-            sendResponse({ success: false, error: error.message });
-          });
-      } else {
-        // 兼容旧格式：重建文件对象
-        const uint8Array = new Uint8Array(fileData.arrayBuffer);
-        const blob = new Blob([uint8Array], { type: fileData.type });
-        const file = new File([blob], fileData.name, {
-          type: fileData.type,
-          lastModified: fileData.lastModified
-        });
-
-        // 使用真正的IndexedDB存储
-        backgroundFileService.storeFileToIndexedDB(file)
-          .then(fileId => {
-            console.log(`✅ 文件已存储到IndexedDB: ${fileData.name} -> ${fileId}`);
-            sendResponse({ success: true, fileId: fileId });
-          })
-          .catch(error => {
-            console.error('Failed to store file to IndexedDB:', error);
-            sendResponse({ success: false, error: error.message });
-          });
-      }
-    } catch (error) {
-      console.error('Failed to store file:', error);
-      sendResponse({ success: false, error: error.message });
-    }
-    return true;
-  }
-
-  // === 分块传输消息处理 ===
-
-  // 检查文件是否需要分块传输
-  if (message.action === 'checkFileChunking') {
-    try {
-      const result = backgroundFileService.checkFileChunking(message.fileId);
-      sendResponse({ success: true, ...result });
-    } catch (error) {
-      console.error('Failed to check file chunking:', error);
-      sendResponse({ success: false, error: error.message });
-    }
-    return true;
-  }
-
-  // 获取文件分块信息
-  if (message.action === 'getFileChunkInfo') {
-    try {
-      const chunkInfo = backgroundFileService.getFileChunkInfo(message.fileId);
-      if (chunkInfo) {
-        sendResponse({ success: true, chunkInfo: chunkInfo });
-      } else {
-        sendResponse({ success: false, error: 'File not found or chunk info unavailable' });
-      }
-    } catch (error) {
-      console.error('Failed to get file chunk info:', error);
-      sendResponse({ success: false, error: error.message });
-    }
-    return true;
-  }
-
-  // 获取指定分块
-  if (message.action === 'getFileChunk') {
-    try {
-      backgroundFileService.getFileChunk(message.fileId, message.chunkIndex)
-        .then(chunkData => {
-          if (chunkData) {
-            // 将 Uint8Array 转换为普通数组以便传输
-            const arrayData = Array.from(chunkData.data);
-            sendResponse({
-              success: true,
-              chunkData: {
-                index: chunkData.index,
-                data: arrayData,
-                size: chunkData.size,
-                totalChunks: chunkData.totalChunks,
-                checksum: chunkData.checksum
-              }
-            });
-          } else {
-            sendResponse({ success: false, error: 'Chunk not found' });
-          }
-        })
-        .catch(error => {
-          console.error('Failed to get file chunk:', error);
-          sendResponse({ success: false, error: error.message });
-        });
-    } catch (error) {
-      console.error('Failed to process getFileChunk request:', error);
       sendResponse({ success: false, error: error.message });
     }
     return true;
