@@ -460,9 +460,19 @@ class FileValidator {
       return { valid: false, error: `不支持的${typeLabel}格式: ${file.name}` };
     }
 
-    // 视频文件需要检查大小限制
-    if (fileType === 'video' && file.size > config.maxFileSize) {
-      return { valid: false, error: `视频文件过大: ${file.name} (最大100MB)` };
+    // 视频文件大小检查 - 支持大文件处理
+    if (fileType === 'video') {
+      const LARGE_FILE_THRESHOLD = 32 * 1024 * 1024; // 32MB
+      const MAX_FILE_SIZE = 20 * 1024 * 1024 * 1024; // 20GB
+
+      if (file.size > MAX_FILE_SIZE) {
+        return { valid: false, error: `视频文件过大: ${file.name} (最大20GB)` };
+      }
+
+      // 大文件提示但不阻止
+      if (file.size > LARGE_FILE_THRESHOLD) {
+        console.log(`大视频文件检测: ${file.name} (${(file.size / 1024 / 1024).toFixed(1)}MB) - 将使用IndexedDB存储`);
+      }
     }
 
     return { valid: true };
@@ -861,13 +871,8 @@ class MainPageController {
       // 显示加载状态
       uploadLoadingManager.show(filesToProcess.length);
 
-      if (this.useChunkedTransfer) {
-        return await this.handleFileSelectionChunked(filesToProcess);
-      } else if (this.fileManager) {
-        return await this.handleFileSelectionFileManager(filesToProcess);
-      } else {
-        return this.handleFileSelectionLegacy(filesToProcess);
-      }
+      // 统一使用IndexedDB存储方案
+      return await this.handleFileSelectionWithIndexedDB(filesToProcess);
     } catch (error) {
       Utils.handleError(error, '文件处理失败');
 
@@ -907,13 +912,8 @@ class MainPageController {
 
       let previews = [];
 
-      // 尝试使用分块传输处理视频文件
-      if (this.useChunkedTransfer) {
-        previews = await this.handleVideoSelectionChunked(videoFiles);
-      } else {
-        // 降级方案：直接处理视频文件
-        previews = await this.handleVideoSelectionLegacy(videoFiles);
-      }
+      // 新方案：直接存储到IndexedDB，立即显示预览
+      previews = await this.handleVideoSelectionWithIndexedDB(videoFiles);
 
       // 统一的结果处理
       this.finishVideoSelection(previews);
@@ -947,8 +947,8 @@ class MainPageController {
     uploadLoadingManager.hide();
   }
 
-  // 分块传输视频文件处理
-  async handleVideoSelectionChunked(videoFiles) {
+  // 新方案：IndexedDB存储视频文件处理
+  async handleVideoSelectionWithIndexedDB(videoFiles) {
     const previews = [];
 
     for (const file of videoFiles) {
@@ -959,15 +959,16 @@ class MainPageController {
           continue;
         }
 
-        // 使用分块传输上传视频文件
-        const fileId = await this.uploadFileInChunks(file);
+        // 直接存储到IndexedDB（完整文件）
+        const fileId = await this.storeFileToIndexedDB(file);
 
         if (fileId) {
           // 创建预览数据
           const preview = this.createVideoPreviewData(file, fileId);
           previews.push(preview);
+          console.log(`🎬 视频文件已存储到IndexedDB: ${file.name} -> ${fileId}`);
         } else {
-          FileErrorHandler.handleFileError('视频上传失败', file.name, '视频上传');
+          FileErrorHandler.handleFileError('视频存储失败', file.name, '视频存储');
         }
 
         uploadLoadingManager.incrementProcessed();
@@ -980,34 +981,7 @@ class MainPageController {
     return previews;
   }
 
-  // 降级方案视频文件处理
-  async handleVideoSelectionLegacy(videoFiles) {
-    const previews = [];
-
-    for (const file of videoFiles) {
-      try {
-        // 验证文件
-        if (!this.validateVideoFile(file)) {
-          uploadLoadingManager.incrementProcessed();
-          continue;
-        }
-
-        // 生成统一格式的ID
-        const videoId = this.generateUniqueId();
-
-        // 创建预览数据
-        const preview = this.createVideoPreviewData(file, videoId);
-        previews.push(preview);
-
-        uploadLoadingManager.incrementProcessed();
-      } catch (error) {
-        Utils.handleError(error, `处理视频失败: ${file.name}`);
-        uploadLoadingManager.incrementProcessed();
-      }
-    }
-
-    return previews;
-  }
+  // 移除冗余的备用方法 - 现在统一使用 handleVideoSelectionWithIndexedDB
 
   // 创建视频预览数据的统一方法
   createVideoPreviewData(file, id) {
@@ -1031,59 +1005,7 @@ class MainPageController {
     return FileValidator.validateFileWithNotification(file, 'video');
   }
 
-  // 分块传输文件处理
-  async handleFileSelectionChunked(files) {
-    const previews = [];
-
-    for (const file of files) {
-      try {
-        // 验证文件
-        if (!this.validateFile(file)) {
-          continue;
-        }
-
-        // 使用分块传输上传文件
-        const fileId = await this.uploadFileInChunks(file);
-
-        if (fileId) {
-          // 创建预览数据
-          const preview = {
-            id: fileId,
-            name: file.name,
-            size: file.size,
-            type: file.type,
-            dataUrl: URL.createObjectURL(file), // 创建本地预览URL
-            lastModified: file.lastModified
-          };
-
-          previews.push(preview);
-        } else {
-          FileErrorHandler.handleFileError('文件上传失败', file.name, '文件上传');
-        }
-
-        // 更新加载进度
-        uploadLoadingManager.incrementProcessed();
-      } catch (error) {
-        Utils.handleError(error, `处理文件失败: ${file.name}`);
-
-        // 更新加载进度（即使失败也要计数）
-        uploadLoadingManager.incrementProcessed();
-      }
-    }
-
-    if (previews.length > 0) {
-      // 追加到现有图片列表，而不是替换
-      appState.imagePreviews = [...appState.imagePreviews, ...previews];
-
-      // 更新UI
-      updateImagePreview();
-
-      // 显示成功提示
-      showNotification(`成功处理 ${previews.length} 个文件`, 'success');
-
-
-    }
-  }
+  // 移除冗余的分块传输文件处理方法 - 现在统一使用 handleFileSelectionWithIndexedDB
 
   // FileManager文件处理（降级方案1）
   async handleFileSelectionFileManager(files) {
@@ -1112,11 +1034,53 @@ class MainPageController {
 
   }
 
-  // 分块上传文件
+  // 直接存储文件到IndexedDB（新方案）
+  async storeFileToIndexedDB(file) {
+    try {
+      const LARGE_FILE_THRESHOLD = 32 * 1024 * 1024; // 32MB
+      const isLargeFile = file.size >= LARGE_FILE_THRESHOLD;
+
+      if (isLargeFile) {
+        console.log(`🎬 存储大文件到IndexedDB: ${file.name} (${(file.size / 1024 / 1024).toFixed(1)}MB)`);
+      }
+
+      // 直接使用现有的 storeFile 方法，它已经支持IndexedDB完整存储
+      const storeResponse = await chrome.runtime.sendMessage({
+        action: 'storeFile',
+        fileData: file // 直接传递File对象
+      });
+
+      if (!storeResponse.success) {
+        throw new Error('Failed to store file: ' + storeResponse.error);
+      }
+
+      const fileId = storeResponse.fileId;
+
+      if (isLargeFile) {
+        console.log(`🎬 大文件存储完成: ${file.name} -> ${fileId}`);
+      }
+
+      return fileId;
+
+    } catch (error) {
+      console.error('IndexedDB storage failed:', error);
+      throw error;
+    }
+  }
+
+  // 分块上传文件（保留作为备用方案）
   async uploadFileInChunks(file) {
     try {
+      const LARGE_FILE_THRESHOLD = 32 * 1024 * 1024; // 32MB
       const chunkSize = 16 * 1024 * 1024; // 16MB per chunk - 优化传输效率
       const totalChunks = Math.ceil(file.size / chunkSize);
+      const isLargeFile = file.size >= LARGE_FILE_THRESHOLD;
+
+      // 大文件提示
+      if (isLargeFile) {
+        console.log(`🎬 开始处理大文件: ${file.name} (${(file.size / 1024 / 1024).toFixed(1)}MB)`);
+        console.log(`🎬 将分为 ${totalChunks} 个块进行传输`);
+      }
 
       // 1. 初始化文件上传
       const initResponse = await chrome.runtime.sendMessage({
@@ -1126,7 +1090,8 @@ class MainPageController {
           size: file.size,
           type: file.type,
           lastModified: file.lastModified,
-          totalChunks: totalChunks
+          totalChunks: totalChunks,
+          isLargeFile: isLargeFile
         }
       });
 
@@ -1141,6 +1106,12 @@ class MainPageController {
         const start = chunkIndex * chunkSize;
         const end = Math.min(start + chunkSize, file.size);
         const chunk = file.slice(start, end);
+
+        // 大文件进度提示
+        if (isLargeFile && chunkIndex % 5 === 0) {
+          const progress = ((chunkIndex + 1) / totalChunks * 100).toFixed(1);
+          console.log(`🎬 上传进度: ${progress}% (${chunkIndex + 1}/${totalChunks})`);
+        }
 
         // 读取分块为ArrayBuffer
         const arrayBuffer = await this.readFileAsArrayBuffer(chunk);
@@ -1161,6 +1132,11 @@ class MainPageController {
         if (!chunkResponse.success) {
           throw new Error(`Failed to upload chunk ${chunkIndex}: ${chunkResponse.error}`);
         }
+      }
+
+      // 大文件完成提示
+      if (isLargeFile) {
+        console.log(`🎬 大文件上传完成: ${file.name} (${totalChunks} 个块)`);
       }
 
       return fileId;
@@ -5707,24 +5683,18 @@ async function handleShortVideoFileUpload(file, fileType, additionalData = {}) {
       // 确保mainController已初始化
       await mainController.ensureInitialized();
 
-      if (mainController.useChunkedTransfer) {
-        // 使用分块传输
-        try {
-          const fileId = await mainController.uploadFileInChunks(file);
+      // 使用新的IndexedDB存储方案
+      try {
+        const fileId = await mainController.storeFileToIndexedDB(file);
 
-          if (fileId) {
-            fileData = createShortVideoFileData(file, fileId, additionalData);
-            console.log(`✅ 短视频文件上传成功 (新系统): ${file.name} -> ${fileId}`);
-          } else {
-            throw new Error(`Failed to upload ${fileType}`);
-          }
-        } catch (error) {
-          console.error('Chunked upload failed, using fallback:', error);
-          fileData = createShortVideoFileData(file, null, additionalData);
+        if (fileId) {
+          fileData = createShortVideoFileData(file, fileId, additionalData);
+          console.log(`✅ 短视频文件存储成功 (IndexedDB): ${file.name} -> ${fileId}`);
+        } else {
+          throw new Error(`Failed to store ${fileType}`);
         }
-      } else {
-        // 降级方案
-        console.log(`⚠️ 短视频文件上传 (传统系统): ${file.name}`);
+      } catch (error) {
+        console.error('IndexedDB storage failed, using fallback:', error);
         fileData = createShortVideoFileData(file, null, additionalData);
       }
     } else {
@@ -5947,6 +5917,15 @@ async function handleShortVideoUpload(event) {
   // 清空之前的视频（只允许一个视频）
   appState.shortVideoPreviews = [];
 
+  // 检查是否为大文件
+  const LARGE_FILE_THRESHOLD = 32 * 1024 * 1024; // 32MB
+  const isLargeFile = file.size >= LARGE_FILE_THRESHOLD;
+
+  if (isLargeFile) {
+    console.log(`🎬 检测到大短视频文件: ${file.name} (${(file.size / 1024 / 1024).toFixed(1)}MB)`);
+    console.log(`🎬 将存储到IndexedDB，支持秒速预览和发布...`);
+  }
+
   // 显示加载状态
   uploadLoadingManager.show(1);
 
@@ -5958,7 +5937,8 @@ async function handleShortVideoUpload(event) {
 
     if (videoData) {
       // 使用统一的状态管理
-      ShortVideoStateManager.handleUploadSuccess(videoData, 'video', '视频上传成功');
+      const successMessage = isLargeFile ? '大视频文件存储成功，可立即发布' : '视频上传成功';
+      ShortVideoStateManager.handleUploadSuccess(videoData, 'video', successMessage);
     }
 
     // 更新加载进度
