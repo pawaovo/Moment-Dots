@@ -14,16 +14,18 @@
 
 #### 核心流程设计
 ```
-用户选择视频 → 立即存储IndexedDB → 创建Blob URL → 即时预览显示
+扩展程序短视频页面：
+用户选择视频 → 立即创建Blob URL预览 → 完整文件存储到Background Script
      ↓
-用户点击发布 → 打开平台页面 → 分块下载文件 → 重组注入
+平台页面（发布时）：
+用户点击发布 → 打开平台页面 → 从Background Script分块下载 → 重组注入
 ```
 
 #### 关键技术组件
-1. **IndexedDB存储引擎**：本地大文件存储
-2. **Blob URL预览系统**：即时视频预览
-3. **分块下载机制**：高效文件传输
-4. **智能路由系统**：根据文件大小选择传输策略
+1. **Background Script存储**：完整文件存储在扩展程序后台
+2. **Blob URL预览系统**：即时视频预览（扩展程序页面）
+3. **分块下载机制**：平台页面高效获取文件
+4. **智能传输路由**：根据文件大小选择传输策略
 
 ## ✅ 技术可行性验证
 
@@ -59,9 +61,9 @@
    - 文件：`main/main.js`
    - 功能：选择文件后立即创建Blob URL并显示预览
 
-2. **优化IndexedDB存储流程**
-   - 文件：`shared/services/FileStorageService.js`
-   - 功能：异步存储，不阻塞预览显示
+2. **优化Background Script存储流程**
+   - 文件：`background/background.js`
+   - 功能：完整文件异步存储，不阻塞预览显示
 
 3. **更新UI状态管理**
    - 文件：`main/main.js`
@@ -76,8 +78,8 @@ async function handleVideoFileSelection(file) {
     const blobUrl = URL.createObjectURL(file);
     showVideoPreview(blobUrl, file.name);
     
-    // 2. 异步存储到IndexedDB（后台进行）
-    const fileId = await storeVideoToIndexedDB(file);
+    // 2. 异步存储完整文件到Background Script（后台进行）
+    const fileId = await storeCompleteFileToBackground(file);
     
     // 3. 更新状态，用户可以立即发布
     updateVideoState(fileId, file, blobUrl);

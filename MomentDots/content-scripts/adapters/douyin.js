@@ -570,22 +570,33 @@ class DouyinAdapter extends DouyinDependencyManager.getBasePlatformAdapter() {
       let filesToProcess = [];
 
       if (fileIds && fileIds.length > 0) {
-        // 新方案：从Background Script获取文件
-        this.log('🎬 使用新的Background Script文件管理系统获取短视频文件...');
+        // 🚀 新方案：使用智能文件获取系统（支持分块下载）
+        this.log('🎬 使用智能文件获取系统获取短视频文件...');
         try {
           for (const fileId of fileIds) {
             this.log(`🎬 请求文件: ${fileId}`);
-            const file = await this.getFileFromExtension(fileId);
+            const file = await this.getFileWithInstantPreview(fileId);
             if (file && file instanceof File) {
               filesToProcess.push(file);
-              this.log(`🎬 成功获取文件: ${file.name} (${file.size} bytes)`);
+              this.log(`🎬 智能获取文件成功: ${file.name} (${file.size} bytes)`);
             } else {
               this.log(`⚠️ 警告: 文件ID ${fileId} 对应的文件未找到`);
             }
           }
         } catch (error) {
-          this.logError('从Background Script获取文件失败:', error);
-          // 降级到传统方案
+          this.logError('智能文件获取失败，尝试降级方案:', error);
+          // 降级到原有方案
+          try {
+            for (const fileId of fileIds) {
+              const file = await this.getFileFromExtension(fileId);
+              if (file && file instanceof File) {
+                filesToProcess.push(file);
+                this.log(`🎬 降级获取文件成功: ${file.name} (${file.size} bytes)`);
+              }
+            }
+          } catch (fallbackError) {
+            this.logError('降级方案也失败:', fallbackError);
+          }
           filesToProcess = files || [];
         }
       } else {

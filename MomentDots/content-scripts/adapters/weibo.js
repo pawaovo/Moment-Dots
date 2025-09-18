@@ -172,8 +172,11 @@ class WeiboConfigManager extends PlatformConfigBase {
 // 防止重复声明
 if (typeof window.WeiboAdapter === 'undefined') {
 
-class WeiboAdapter {
+class WeiboAdapter extends FileProcessorBase {
   constructor() {
+    // 🚀 继承FileProcessorBase以获得智能文件获取能力
+    super('weibo', {});
+
     this.platform = 'weibo';
 
     // 初始化MutationObserver基类功能
@@ -1417,18 +1420,29 @@ class WeiboAdapter {
         for (const fileId of data.fileIds) {
           this.log(`请求文件: ${fileId}`);
 
-          // 使用Promise包装的方式获取文件，参考即刻实现，避免并发问题
-          const file = await this.getFileFromExtension(fileId);
+          // 🚀 使用新的智能文件获取方法（支持分块下载）
+          const file = await this.getFileWithInstantPreview(fileId);
           if (file && file instanceof File) {
             filesToUpload.push(file);
-            this.log(`成功获取文件: ${file.name} (${file.size} bytes)`);
+            this.log(`智能获取文件成功: ${file.name} (${file.size} bytes)`);
           } else {
             this.log(`警告: 文件ID ${fileId} 对应的文件未找到`);
           }
         }
       } catch (error) {
-        this.logError('从Background Script获取文件失败:', error);
+        this.logError('智能文件获取失败，尝试降级方案:', error);
         // 降级到原有方案
+        try {
+          for (const fileId of data.fileIds) {
+            const file = await this.getFileFromExtension(fileId);
+            if (file && file instanceof File) {
+              filesToUpload.push(file);
+              this.log(`降级获取文件成功: ${file.name} (${file.size} bytes)`);
+            }
+          }
+        } catch (fallbackError) {
+          this.logError('降级方案也失败:', fallbackError);
+        }
         filesToUpload = this.collectLegacyFiles(data);
       }
     } else {
@@ -1461,25 +1475,16 @@ class WeiboAdapter {
   }
 
   /**
-   * 准备视频文件（内部方法）
-   * @param {Array} files - 原始文件数组
+   * 准备视频文件（内部方法）- 优化版本
+   * @param {Array} files - 原始文件数组（现在应该都是File对象）
    * @returns {File} - 处理后的视频文件
    */
   _prepareVideoFile(files) {
-    const filesToUpload = [];
-
-    for (const file of files) {
-      if (file instanceof File) {
-        filesToUpload.push(file);
-      } else if (file.dataUrl || file.data) {
-        const convertedFile = this.createFileFromBase64(file);
-        if (convertedFile) {
-          filesToUpload.push(convertedFile);
-        }
-      }
-    }
+    // 🚀 新系统：所有文件都应该是File对象，不需要Base64转换
+    const filesToUpload = files.filter(file => file instanceof File);
 
     if (filesToUpload.length === 0) {
+      this.logError('没有有效的视频文件可以上传，收到的文件:', files);
       throw new Error('没有有效的视频文件可以上传');
     }
 

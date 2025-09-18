@@ -18,20 +18,23 @@
   }
 
   /**
-   * 平台适配器基类
+   * 平台适配器基类 - 继承FileProcessorBase以获得智能文件处理能力
    */
-  class BasePlatformAdapter {
+  class BasePlatformAdapter extends FileProcessorBase {
     constructor(platform) {
+      // 🚀 继承FileProcessorBase以获得智能文件获取能力
+      super(platform, {});
+
       this.platform = platform;
       this.injector = window.universalInjector;
       this.maxRetries = 3;
       this.defaultTimeout = 10000;
-      
+
       if (!this.injector) {
         throw new Error('UniversalContentInjector not found. Please load it first.');
       }
-      
-      console.log(`${platform} adapter initialized`);
+
+      console.log(`${platform} adapter initialized with smart file processing`);
     }
 
     /**

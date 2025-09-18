@@ -1009,21 +1009,17 @@ class MainPageController {
     return previews;
   }
 
-  // 创建视频预览数据的统一方法
+  // 🚀 优化：使用统一的文件数据创建（替代重复代码）
   createVideoPreviewData(file, id) {
-    return {
+    return FileDataManager.createFileData(file, {
       id: id,
-      name: file.name,
-      size: file.size,
-      type: file.type,
-      dataUrl: URL.createObjectURL(file),
-      lastModified: file.lastModified
-    };
+      prefix: 'file'
+    });
   }
 
-  // 生成唯一ID（使用全局统一函数）
+  // 🚀 优化：使用统一的ID生成
   generateUniqueId() {
-    return generateUniqueFileId('file');
+    return FileDataManager.generateUniqueId('file');
   }
 
   // 验证视频文件（使用统一验证器）
@@ -1723,9 +1719,9 @@ class ImageUploadHandler {
     return FileValidator.validateFile(file, 'image');
   }
 
-  // 生成唯一ID（使用全局统一函数）
+  // 🚀 优化：使用统一的ID生成
   generateUniqueId() {
-    return generateUniqueFileId('image');
+    return FileDataManager.generateUniqueId('image');
   }
 
   // 处理单个文件完成
@@ -1826,9 +1822,9 @@ class VideoUploadHandler {
     return FileValidator.validateFile(file, 'video');
   }
 
-  // 生成唯一ID（使用全局统一函数）
+  // 🚀 优化：使用统一的ID生成
   generateUniqueId() {
-    return generateUniqueFileId('video');
+    return FileDataManager.generateUniqueId('video');
   }
 
   // 处理单个文件完成
@@ -2585,11 +2581,17 @@ function showNotification(message, type = 'info') {
     }, 300);
   }, 3000);
 }
-// 提取文件ID的辅助函数
+// 提取文件ID的辅助函数 - 优化版本
 function extractFileIds(previews) {
   return (previews || [])
-    .filter(preview => preview.id && preview.id.startsWith('file_'))
-    .map(preview => preview.id);
+    .filter(preview => {
+      // 🚀 支持新的即时预览系统：优先使用fileId字段
+      return preview.fileId || (preview.id && preview.id.startsWith('file_'));
+    })
+    .map(preview => {
+      // 🚀 优先返回Background Script中的文件ID
+      return preview.fileId || preview.id;
+    });
 }
 
 // 创建发布数据的统一函数（保留向后兼容）
@@ -3143,8 +3145,7 @@ function updateMediaPreview(mediaType, mediaArray, createElementFn, getContainer
   updateMediaCount();
 }
 
-// 注意：updateImageCount 和 updateClearAllButton 函数已被 updateMediaCount 替代
-// 这些函数保留用于向后兼容，但不再被主要逻辑使用
+
 
 function removeImage(imageId) {
   Utils.safeExecute(() => {
@@ -4558,6 +4559,108 @@ function addPageStyles() {
         position: relative; /* 为视频上传区域内的加载动画提供定位基准 */
       }
 
+      /* 即时预览相关样式 */
+      .short-video-preview-container {
+        position: relative;
+        width: 100%;
+        height: 160px;
+        border-radius: 8px;
+        overflow: hidden;
+        background: #000;
+      }
+
+      .short-video-preview-video {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        border-radius: 8px;
+      }
+
+      .short-video-preview-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: linear-gradient(to bottom, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0) 30%, rgba(0,0,0,0) 70%, rgba(0,0,0,0.5) 100%);
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        padding: 8px;
+        pointer-events: none;
+      }
+
+      .short-video-info {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        color: white;
+        font-size: 12px;
+      }
+
+      .short-video-name {
+        font-weight: 500;
+        max-width: 120px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .short-video-size {
+        opacity: 0.8;
+        font-size: 11px;
+      }
+
+      .storage-status {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 10px;
+        padding: 2px 6px;
+        border-radius: 12px;
+        background: rgba(0,0,0,0.6);
+        backdrop-filter: blur(4px);
+        width: fit-content;
+      }
+
+      .storage-status.storage-success {
+        color: #10b981;
+      }
+
+      .storage-status.storage-failed {
+        color: #ef4444;
+      }
+
+      .storage-icon {
+        width: 12px;
+        height: 12px;
+      }
+
+      .short-video-remove-btn {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        width: 24px;
+        height: 24px;
+        background: rgba(0,0,0,0.7);
+        color: white;
+        border: none;
+        border-radius: 50%;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 16px;
+        line-height: 1;
+        pointer-events: auto;
+        transition: all 0.2s ease;
+      }
+
+      .short-video-remove-btn:hover {
+        background: rgba(239, 68, 68, 0.9);
+        transform: scale(1.1);
+      }
+
       .cover-upload-section {
         display: flex;
         flex-direction: row;
@@ -4646,52 +4749,7 @@ function addPageStyles() {
         margin-top: 0.5rem;
       }
 
-      /* 短视频预览容器样式 - 参考封面预览实现 */
-      .short-video-preview-container {
-        position: relative;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 100%;
-        height: 100%;
-        background-color: transparent;
-        border-radius: 8px;
-        overflow: hidden;
-      }
-
-      .short-video-preview-video {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-        border-radius: 8px;
-        border: 1px solid #e5e7eb;
-        background-color: #f9fafb;
-      }
-
-      .short-video-remove-btn {
-        position: absolute;
-        top: 4px;
-        right: 4px;
-        width: 24px;
-        height: 24px;
-        background-color: #ef4444;
-        color: white;
-        border-radius: 50%;
-        font-size: 12px;
-        border: none;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: all 0.2s;
-        z-index: 10;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-      }
-
-      .short-video-remove-btn:hover {
-        background-color: #dc2626;
-        transform: scale(1.1);
-      }
+      /* 🚀 优化：重复的短视频预览样式已删除，使用上面的统一样式定义 */
 
 
 
@@ -5740,23 +5798,112 @@ async function handleShortVideoFileUpload(file, fileType, additionalData = {}) {
   }
 }
 
-// 统一的ID生成函数
-function generateUniqueFileId(prefix = 'file') {
-  return `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+// 🚀 优化：统一的日志处理工具类（避免与现有ErrorHandler冲突）
+class LogManager {
+  static logError(context, error, additionalInfo = {}) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(`❌ [${context}] ${errorMessage}`, {
+      error: error,
+      stack: error instanceof Error ? error.stack : undefined,
+      ...additionalInfo
+    });
+  }
+
+  static logSuccess(context, message, additionalInfo = {}) {
+    console.log(`✅ [${context}] ${message}`, additionalInfo);
+  }
+
+  static logWarning(context, message, additionalInfo = {}) {
+    console.warn(`⚠️ [${context}] ${message}`, additionalInfo);
+  }
+
+  static logInfo(context, message, additionalInfo = {}) {
+    console.log(`ℹ️ [${context}] ${message}`, additionalInfo);
+  }
 }
 
-// 创建短视频文件数据的统一函数
-function createShortVideoFileData(file, fileId = null, additionalData = {}) {
-  const baseId = fileId || generateUniqueFileId(additionalData.prefix || 'file');
+// 🚀 优化：统一的文件处理工具类
+class FileDataManager {
+  // 统一的ID生成函数
+  static generateUniqueId(prefix = 'file') {
+    return `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
 
-  return {
-    id: baseId,
-    name: file.name,
-    size: file.size,
-    type: file.type,
-    dataUrl: URL.createObjectURL(file),
+  // 统一的元数据标准化函数
+  static standardizeMetadata(file, additionalData = {}) {
+    return {
+      name: file.name,
+      size: file.size,
+      type: file.type,
+      lastModified: file.lastModified || Date.now(),
+      timestamp: Date.now(),
+      ...additionalData
+    };
+  }
+
+  // 统一的文件数据创建函数（替代所有重复的创建函数）
+  static createFileData(file, options = {}) {
+    const {
+      id = null,
+      prefix = 'file',
+      blobUrl = null,
+      fileId = null,
+      storageStatus = 'stored',
+      isInstantPreview = false,
+      ...additionalData
+    } = options;
+
+    const finalId = id || this.generateUniqueId(prefix);
+    const dataUrl = blobUrl || URL.createObjectURL(file);
+
+    return {
+      id: finalId,
+      name: file.name,
+      size: file.size,
+      type: file.type,
+      dataUrl: dataUrl,
+      file: file, // 保留原始文件引用
+      fileId: fileId, // Background Script中的文件ID
+      timestamp: Date.now(),
+      isInstantPreview: isInstantPreview,
+      storageStatus: storageStatus,
+      ...additionalData
+    };
+  }
+
+  // Blob URL管理
+  static managedBlobUrls = new Set();
+
+  static createManagedBlobUrl(file) {
+    const blobUrl = URL.createObjectURL(file);
+    this.managedBlobUrls.add(blobUrl);
+    return blobUrl;
+  }
+
+  static revokeBlobUrl(blobUrl) {
+    if (this.managedBlobUrls.has(blobUrl)) {
+      URL.revokeObjectURL(blobUrl);
+      this.managedBlobUrls.delete(blobUrl);
+    }
+  }
+
+  static revokeAllBlobUrls() {
+    this.managedBlobUrls.forEach(url => URL.revokeObjectURL(url));
+    this.managedBlobUrls.clear();
+  }
+}
+
+// 向后兼容的全局函数（保持现有代码正常工作）
+function generateUniqueFileId(prefix = 'file') {
+  return FileDataManager.generateUniqueId(prefix);
+}
+
+function createShortVideoFileData(file, fileId = null, additionalData = {}) {
+  return FileDataManager.createFileData(file, {
+    fileId: fileId,
+    prefix: additionalData.prefix || 'file',
     ...additionalData
-  };
+  });
 }
 
 // 渲染平台列表函数
@@ -5926,7 +6073,7 @@ function bindShortVideoUploadEvents() {
   }
 }
 
-// 处理短视频上传
+// 处理短视频上传 - 增强版：即时预览功能
 async function handleShortVideoUpload(event) {
   const files = event.target.files;
   if (!files || files.length === 0) return;
@@ -5946,6 +6093,82 @@ async function handleShortVideoUpload(event) {
 
   // 清空之前的视频（只允许一个视频）
   appState.shortVideoPreviews = [];
+
+  try {
+    // 🚀 新功能：即时预览处理
+    await handleInstantVideoPreview(file);
+
+    console.log('✅ 短视频即时预览已就绪，用户可以立即开始发布');
+  } catch (error) {
+    console.error('即时预览失败，降级到原有方案:', error);
+    // 降级到原有上传方案
+    await handleLegacyVideoUpload(file);
+  } finally {
+    // 清空文件输入，允许重复选择同一文件
+    if (event.target) {
+      event.target.value = '';
+    }
+  }
+}
+
+// 🚀 优化：即时视频预览处理（使用统一工具类和日志管理）
+async function handleInstantVideoPreview(file) {
+  const context = '即时视频预览';
+  LogManager.logInfo(context, `开始处理: ${file.name}`);
+
+  // 1. 使用统一的Blob URL管理
+  const blobUrl = FileDataManager.createManagedBlobUrl(file);
+
+  // 2. 同步存储到Background Script（使用Blob URL，速度很快）
+  try {
+    const fileId = await storeCompleteFileToBackground(file);
+
+    // 3. 使用统一的文件数据创建函数
+    const videoData = FileDataManager.createFileData(file, {
+      prefix: 'instant_video',
+      blobUrl: blobUrl,
+      fileId: fileId,
+      isInstantPreview: true,
+      storageStatus: 'stored'
+    });
+
+    appState.shortVideoPreviews = [videoData];
+
+    // 4. 立即更新UI，用户可以开始发布
+    updateShortVideoPreview();
+    updateShortVideoCount();
+    enablePublishButton();
+
+    LogManager.logSuccess(context, '文件已存储，用户可以立即发布', {
+      fileId: fileId,
+      fileName: file.name,
+      fileSize: file.size
+    });
+  } catch (error) {
+    LogManager.logWarning(context, '存储失败，但预览仍可用', { error: error });
+
+    // 即使存储失败，仍然显示预览（使用本地Blob URL）
+    const videoData = FileDataManager.createFileData(file, {
+      prefix: 'instant_video',
+      blobUrl: blobUrl,
+      fileId: null,
+      isInstantPreview: true,
+      storageStatus: 'failed'
+    });
+
+    appState.shortVideoPreviews = [videoData];
+
+    updateShortVideoPreview();
+    updateShortVideoCount();
+    enablePublishButton();
+  }
+}
+
+
+
+// 降级方案：原有的视频上传逻辑
+async function handleLegacyVideoUpload(file) {
+  console.log('🔄 使用原有视频上传方案');
 
   // 显示加载状态
   uploadLoadingManager.show(1);
@@ -5967,12 +6190,61 @@ async function handleShortVideoUpload(event) {
     Utils.handleError(error, '短视频上传失败');
     // 即使失败也要更新进度以隐藏加载状态
     uploadLoadingManager.incrementProcessed();
-  } finally {
-    // 清空文件输入，允许重复选择同一文件
-    if (event.target) {
-      event.target.value = '';
+  }
+}
+
+// 🚀 优化：存储完整文件到Background Script（使用统一日志管理）
+async function storeCompleteFileToBackground(file) {
+  const context = '文件存储';
+
+  try {
+    LogManager.logInfo(context, `开始存储: ${file.name} (${Utils.formatFileSize(file.size)})`);
+
+    // 创建Blob URL并传递给Background Script
+    const blobUrl = URL.createObjectURL(file);
+
+    const response = await chrome.runtime.sendMessage({
+      action: 'storeFileBlobUrl',
+      blobUrl: blobUrl,
+      metadata: FileDataManager.standardizeMetadata(file, {
+        isInstantPreview: true
+      })
+    });
+
+    if (response && response.success) {
+      LogManager.logSuccess(context, `存储成功: ${response.fileId}`, {
+        fileName: file.name,
+        fileSize: file.size
+      });
+      return response.fileId;
+    } else {
+      throw new Error(response?.error || '文件存储失败');
+    }
+  } catch (error) {
+    LogManager.logError(context, error, {
+      fileName: file.name,
+      fileSize: file.size
+    });
+    throw error;
+  }
+}
+
+// 启用发布按钮（即时预览后立即可用）
+function enablePublishButton() {
+  const syncButton = domCache.get('sync-button');
+  if (syncButton) {
+    syncButton.disabled = false;
+    syncButton.classList.remove('opacity-50', 'cursor-not-allowed');
+    syncButton.classList.add('hover:bg-blue-600');
+
+    // 更新按钮文本提示用户可以立即发布
+    const originalText = syncButton.textContent;
+    if (!originalText.includes('✅')) {
+      syncButton.textContent = '✅ ' + originalText;
     }
   }
+
+  console.log('✅ 发布按钮已启用，用户可以立即开始发布');
 }
 
 // 处理封面上传
@@ -6020,13 +6292,16 @@ async function handleCoverUpload(event, coverType) {
   }
 }
 
-// 更新短视频预览
+// 更新短视频预览 - 增强版：支持即时预览和存储状态显示
 function updateShortVideoPreview() {
   const uploadArea = domCache.get('video-upload-area');
   if (!uploadArea) return;
 
   if (appState.shortVideoPreviews && appState.shortVideoPreviews.length > 0) {
     const videoData = appState.shortVideoPreviews[0];
+
+    // 生成存储状态指示器
+    const storageStatusIndicator = generateStorageStatusIndicator(videoData);
 
     // 替换上传区域内容为预览内容
     uploadArea.innerHTML = `
@@ -6037,13 +6312,24 @@ function updateShortVideoPreview() {
           class="short-video-preview-video"
           title="${videoData.name}"
         ></video>
-        <button
-          class="short-video-remove-btn"
-          data-video-id="${videoData.id}"
-          title="删除视频"
-        >
-          ×
-        </button>
+        <div class="short-video-preview-overlay">
+          <div class="short-video-info">
+            <div class="short-video-name" title="${videoData.name}">
+              ${videoData.name}
+            </div>
+            <div class="short-video-size">
+              ${Utils.formatFileSize(videoData.size)}
+            </div>
+            ${storageStatusIndicator}
+          </div>
+          <button
+            class="short-video-remove-btn"
+            data-video-id="${videoData.id}"
+            title="删除视频"
+          >
+            ×
+          </button>
+        </div>
       </div>
     `;
   } else {
@@ -6068,6 +6354,39 @@ function updateShortVideoPreview() {
     // 强制刷新DOM缓存并重新绑定事件
     domCache.refresh('short-video-upload');
     rebindShortVideoUploadEvent();
+  }
+}
+
+// 生成存储状态指示器（简化版）
+function generateStorageStatusIndicator(videoData) {
+  if (!videoData.isInstantPreview) {
+    // 非即时预览的视频，不显示存储状态
+    return '';
+  }
+
+  const status = videoData.storageStatus || 'stored';
+
+  switch (status) {
+    case 'stored':
+      return `
+        <div class="storage-status storage-success" title="已安全存储到扩展程序">
+          <svg class="storage-icon" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+          </svg>
+          <span>已存储</span>
+        </div>
+      `;
+    case 'failed':
+      return `
+        <div class="storage-status storage-failed" title="存储失败，将使用本地文件">
+          <svg class="storage-icon" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+          </svg>
+          <span>本地文件</span>
+        </div>
+      `;
+    default:
+      return '';
   }
 }
 

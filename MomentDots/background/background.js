@@ -233,6 +233,181 @@ class BackgroundFileService {
     }
   }
 
+  // 🚀 新方法：存储Blob文件（用于即时预览）
+  storeFileBlob(blob, metadata) {
+    try {
+      // 生成唯一文件ID
+      const fileId = `instant_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+      // 验证输入参数
+      if (!blob || !(blob instanceof Blob)) {
+        throw new Error('Invalid blob: must be a Blob object');
+      }
+
+      if (!metadata || !metadata.name) {
+        throw new Error('Invalid metadata: name is required');
+      }
+
+      // 存储Blob对象
+      this.fileStorage.set(fileId, blob);
+
+      // 存储完整元数据
+      const completeMetadata = {
+        id: fileId,
+        name: metadata.name,
+        size: metadata.size || blob.size,
+        type: metadata.type || blob.type,
+        lastModified: metadata.lastModified || Date.now(),
+        timestamp: Date.now(),
+        isInstantPreview: true // 标记为即时预览文件
+      };
+
+      this.fileMetadata.set(fileId, completeMetadata);
+
+      console.log(`✅ 即时预览文件存储成功: ${fileId} (${blob.size} bytes)`);
+      return fileId;
+    } catch (error) {
+      console.error('❌ 即时预览文件存储失败:', error);
+      throw error;
+    }
+  }
+
+  // 🚀 新方法：通过Blob URL存储文件（用于即时预览）
+  async storeFileBlobUrl(blobUrl, metadata) {
+    try {
+      // 生成唯一文件ID
+      const fileId = `instant_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+      // 验证输入参数
+      if (!blobUrl || !blobUrl.startsWith('blob:')) {
+        throw new Error('Invalid blob URL');
+      }
+
+      if (!metadata || !metadata.name) {
+        throw new Error('Invalid metadata: name is required');
+      }
+
+      // 从Blob URL获取Blob对象
+      const response = await fetch(blobUrl);
+      const blob = await response.blob();
+
+      // 存储Blob对象
+      this.fileStorage.set(fileId, blob);
+
+      // 存储完整元数据
+      const completeMetadata = {
+        id: fileId,
+        name: metadata.name,
+        size: metadata.size || blob.size,
+        type: metadata.type || blob.type,
+        lastModified: metadata.lastModified || Date.now(),
+        timestamp: Date.now(),
+        isInstantPreview: true // 标记为即时预览文件
+      };
+
+      this.fileMetadata.set(fileId, completeMetadata);
+
+      console.log(`✅ 通过Blob URL存储文件成功: ${fileId} (${blob.size} bytes)`);
+      return fileId;
+    } catch (error) {
+      console.error('❌ 通过Blob URL存储文件失败:', error);
+      throw error;
+    }
+  }
+
+  // 🚀 第二阶段：分块下载API方法
+
+  // 获取文件元数据
+  getFileMetadata(fileId) {
+    try {
+      const metadata = this.fileMetadata.get(fileId);
+      if (!metadata) {
+        throw new Error(`File metadata not found: ${fileId}`);
+      }
+
+      const chunkSize = 16 * 1024 * 1024; // 16MB per chunk
+      const totalChunks = Math.ceil(metadata.size / chunkSize);
+
+      return {
+        id: fileId,
+        name: metadata.name,
+        size: metadata.size,
+        type: metadata.type,
+        totalChunks: totalChunks,
+        chunkSize: chunkSize,
+        lastModified: metadata.lastModified,
+        isInstantPreview: metadata.isInstantPreview || false
+      };
+    } catch (error) {
+      console.error('Failed to get file metadata:', error);
+      throw error;
+    }
+  }
+
+  // 获取文件分块
+  async getFileChunk(fileId, chunkIndex, chunkSize = 16 * 1024 * 1024) {
+    try {
+      const blob = this.fileStorage.get(fileId);
+      if (!blob) {
+        throw new Error(`File not found: ${fileId}`);
+      }
+
+      const start = chunkIndex * chunkSize;
+      const end = Math.min(start + chunkSize, blob.size);
+
+      if (start >= blob.size) {
+        throw new Error(`Chunk index out of range: ${chunkIndex}`);
+      }
+
+      const chunk = blob.slice(start, end);
+      const arrayBuffer = await chunk.arrayBuffer();
+
+      console.log(`📦 分块下载: ${fileId} chunk ${chunkIndex} (${arrayBuffer.byteLength} bytes)`);
+
+      return {
+        chunkData: Array.from(new Uint8Array(arrayBuffer)),
+        chunkIndex: chunkIndex,
+        chunkSize: arrayBuffer.byteLength,
+        isLastChunk: end >= blob.size
+      };
+    } catch (error) {
+      console.error('Failed to get file chunk:', error);
+      throw error;
+    }
+  }
+
+  // 智能文件传输路由
+  async getFileWithSmartRouting(fileId) {
+    try {
+      const metadata = this.getFileMetadata(fileId);
+
+      // 大文件阈值：32MB
+      const largeFileThreshold = 32 * 1024 * 1024;
+
+      if (metadata.size > largeFileThreshold) {
+        console.log(`📊 大文件检测: ${metadata.name} (${metadata.size} bytes) - 使用分块传输`);
+        return {
+          transferMode: 'chunked',
+          metadata: metadata
+        };
+      } else {
+        console.log(`📊 小文件检测: ${metadata.name} (${metadata.size} bytes) - 使用直接传输`);
+        // 小文件直接传输
+        const blob = this.fileStorage.get(fileId);
+        const arrayBuffer = await blob.arrayBuffer();
+
+        return {
+          transferMode: 'direct',
+          arrayData: Array.from(new Uint8Array(arrayBuffer)),
+          metadata: metadata
+        };
+      }
+    } catch (error) {
+      console.error('Failed to get file with smart routing:', error);
+      throw error;
+    }
+  }
+
   // 获取文件（返回Blob对象）
   getFile(fileId) {
     try {
@@ -986,13 +1161,85 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   // 文件操作消息处理（兼容原有接口）
   if (message.action === 'storeFile') {
     try {
-      const fileId = backgroundFileService.storeFile(message.fileData);
+      // 🚀 增强版：支持即时预览文件存储
+      let fileId;
+
+      if (message.fileData && message.metadata) {
+        // 新的即时预览存储方式：直接从ArrayBuffer创建Blob
+        const uint8Array = new Uint8Array(message.fileData);
+        const blob = new Blob([uint8Array], { type: message.metadata.type });
+
+        fileId = backgroundFileService.storeFileBlob(blob, message.metadata);
+        console.log('✅ 即时预览文件存储成功:', fileId);
+      } else {
+        // 原有存储方式（向后兼容）
+        fileId = backgroundFileService.storeFile(message.fileData);
+      }
+
       sendResponse({ success: true, fileId: fileId });
     } catch (error) {
       console.error('Failed to store file:', error);
       sendResponse({ success: false, error: error.message });
     }
     return true; // 保持消息通道开放
+  }
+
+  // 🚀 新增：通过Blob URL存储文件（用于即时预览）
+  if (message.action === 'storeFileBlobUrl') {
+    try {
+      // 从Blob URL获取文件并存储
+      backgroundFileService.storeFileBlobUrl(message.blobUrl, message.metadata)
+        .then(fileId => {
+          sendResponse({ success: true, fileId: fileId });
+        })
+        .catch(error => {
+          console.error('Failed to store file from blob URL:', error);
+          sendResponse({ success: false, error: error.message });
+        });
+    } catch (error) {
+      console.error('Failed to store file blob URL:', error);
+      sendResponse({ success: false, error: error.message });
+    }
+    return true;
+  }
+
+  // 🚀 第二阶段：分块下载API（用于平台页面获取文件）
+  if (message.action === 'getFileMetadata') {
+    try {
+      const metadata = backgroundFileService.getFileMetadata(message.fileId);
+      sendResponse({ success: true, metadata: metadata });
+    } catch (error) {
+      console.error('Failed to get file metadata:', error);
+      sendResponse({ success: false, error: error.message });
+    }
+    return true;
+  }
+
+  if (message.action === 'getFileChunk') {
+    // 🔧 修复：使用Promise处理异步操作
+    backgroundFileService.getFileChunk(
+      message.fileId,
+      message.chunkIndex,
+      message.chunkSize
+    ).then(chunkData => {
+      sendResponse({ success: true, ...chunkData });
+    }).catch(error => {
+      console.error('Failed to get file chunk:', error);
+      sendResponse({ success: false, error: error.message });
+    });
+    return true;
+  }
+
+  if (message.action === 'getFileWithSmartRouting') {
+    // 🔧 修复：使用Promise处理异步操作
+    backgroundFileService.getFileWithSmartRouting(message.fileId)
+      .then(result => {
+        sendResponse({ success: true, ...result });
+      }).catch(error => {
+        console.error('Failed to get file with smart routing:', error);
+        sendResponse({ success: false, error: error.message });
+      });
+    return true;
   }
 
   if (message.action === 'getFile') {

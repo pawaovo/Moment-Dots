@@ -157,11 +157,13 @@ class WeixinChannelsMutationObserver extends MutationObserverBase {
 }
 
 /**
- * 微信视频号平台适配器主类
+ * 🚀 微信视频号平台适配器主类 - 升级为FileProcessorBase
+ * 继承FileProcessorBase以支持智能文件获取和即时预览功能
  */
-class WeixinChannelsPlatformAdapter extends PlatformAdapter {
+class WeixinChannelsPlatformAdapter extends FileProcessorBase {
   constructor() {
-    super('weixinchannels');
+    // 🚀 继承FileProcessorBase以获得智能文件获取能力
+    super('weixinchannels', {});
     this.configManager = new WeixinChannelsConfigManager();
     this.config = this.configManager.loadConfig();
     this.mutationObserver = new WeixinChannelsMutationObserver(this);
@@ -170,7 +172,15 @@ class WeixinChannelsPlatformAdapter extends PlatformAdapter {
     this._pageTypeCache = null;
     this._lastUrl = null;
 
-    this.log('微信视频号适配器初始化完成');
+    this.log('🚀 微信视频号适配器初始化完成 - 已升级为FileProcessorBase，支持智能文件获取');
+  }
+
+  /**
+   * 🚀 延迟函数（添加缺失的方法）
+   * @param {number} ms - 延迟毫秒数
+   */
+  async delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 
   /**
@@ -280,13 +290,13 @@ class WeixinChannelsPlatformAdapter extends PlatformAdapter {
   }
 
   /**
-   * 重写内容区域查找方法 - 支持Shadow DOM和页面类型检测
+   * 🚀 查找内容编辑区域 - 支持Shadow DOM和备用选择器
    */
   findContentArea() {
     const selectors = this.getCurrentSelectors();
     return this.findElementInShadow(
       selectors.contentArea,
-      this.config.selectors.fallbackSelectors.contentArea
+      this.config.selectors.fallbackSelectors?.contentArea || []
     );
   }
 
@@ -348,7 +358,7 @@ class WeixinChannelsPlatformAdapter extends PlatformAdapter {
   }
 
   /**
-   * 重写标题注入方法 - 添加长度限制
+   * 🚀 标题注入方法 - 优化版本
    */
   async injectTitle(title) {
     if (!title?.trim()) {
@@ -356,21 +366,22 @@ class WeixinChannelsPlatformAdapter extends PlatformAdapter {
       return true;
     }
 
-    // 截断过长标题
-    const truncatedTitle = title.length > this.config.limits.maxTitleLength
-      ? title.substring(0, this.config.limits.maxTitleLength)
-      : title;
+    // 使用统一的内容截断方法
+    const truncatedTitle = this._truncateContent(title, this.config.limits.maxTitleLength, '标题');
 
-    if (truncatedTitle !== title) {
-      this.log(`标题过长，已截断为: ${truncatedTitle}`);
+    const titleInput = this.findTitleInput();
+    if (!titleInput) {
+      throw new Error('标题输入框未找到');
     }
 
-    // 使用基类的统一方法
-    return await super.injectTitle(truncatedTitle);
+    // 使用统一的内容注入方法
+    this._injectToElement(titleInput, truncatedTitle);
+    this.log(`✅ 标题注入成功: ${truncatedTitle}`);
+    return true;
   }
 
   /**
-   * 重写内容注入方法 - 添加长度限制
+   * 🚀 内容注入方法 - 优化版本
    */
   async injectContent(content) {
     if (!content?.trim()) {
@@ -378,47 +389,74 @@ class WeixinChannelsPlatformAdapter extends PlatformAdapter {
       return true;
     }
 
-    // 截断过长内容
-    const truncatedContent = content.length > this.config.limits.maxContentLength
-      ? content.substring(0, this.config.limits.maxContentLength)
-      : content;
+    // 使用统一的内容截断方法
+    const truncatedContent = this._truncateContent(content, this.config.limits.maxContentLength, '内容');
 
-    if (truncatedContent !== content) {
-      this.log('内容过长，已截断');
+    // 激活编辑区域
+    await this.activateEditingArea();
+
+    const contentArea = this.findContentArea();
+    if (!contentArea) {
+      throw new Error('内容编辑区域未找到');
     }
 
-    // 使用基类的统一方法
-    return await super.injectContent(truncatedContent);
+    // 使用统一的内容注入方法
+    this._injectToElement(contentArea, truncatedContent);
+    this.log(`✅ 内容注入成功: ${truncatedContent.substring(0, 50)}...`);
+    return true;
   }
 
   /**
-   * 从扩展获取文件 - 使用Background Script文件管理系统
+   * 🚀 统一的内容截断方法 - 避免重复代码
+   * @param {string} content - 原始内容
+   * @param {number} maxLength - 最大长度
+   * @param {string} type - 内容类型（用于日志）
+   * @returns {string} 截断后的内容
    */
-  async getFileFromExtension(fileId) {
-    return new Promise((resolve, reject) => {
-      chrome.runtime.sendMessage({
-        action: 'getFile',
-        fileId: fileId
-      }, (response) => {
-        if (chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
-          return;
-        }
+  _truncateContent(content, maxLength, type) {
+    if (content.length <= maxLength) {
+      return content;
+    }
 
-        if (response?.success && response.arrayData) {
-          const uint8Array = new Uint8Array(response.arrayData);
-          const blob = new Blob([uint8Array], { type: response.metadata.type });
-          const file = new File([blob], response.metadata.name, {
-            type: response.metadata.type,
-            lastModified: response.metadata.lastModified
-          });
-          resolve(file);
-        } else {
-          reject(new Error(response?.error || 'Failed to get file'));
-        }
-      });
+    const truncated = content.substring(0, maxLength);
+    this.log(`${type}过长，已截断: ${content.length} -> ${truncated.length} 字符`);
+    return truncated;
+  }
+
+  /**
+   * 🚀 统一的元素内容注入方法 - 避免重复代码
+   * @param {HTMLElement} element - 目标元素
+   * @param {string} content - 要注入的内容
+   */
+  _injectToElement(element, content) {
+    // 清空并注入内容
+    if (element.contentEditable === 'true') {
+      // 可编辑div
+      element.innerHTML = '';
+      element.textContent = content;
+    } else if (element.tagName === 'TEXTAREA' || element.tagName === 'INPUT') {
+      // 输入框
+      element.value = '';
+      element.value = content;
+    }
+
+    // 🚀 使用统一的事件触发方法
+    this._triggerEvents(element, ['input', 'change', 'blur']);
+  }
+
+  /**
+   * 🚀 统一的事件触发方法 - 避免重复代码
+   * @param {HTMLElement} element - 目标元素
+   * @param {Array<string>} eventTypes - 事件类型数组
+   */
+  _triggerEvents(element, eventTypes) {
+    eventTypes.forEach(eventType => {
+      const event = new Event(eventType, { bubbles: true });
+      element.dispatchEvent(event);
     });
   }
+
+  // 🚀 优化：删除冗余的getFileFromExtension方法，现在由FileProcessorBase统一处理
 
   /**
    * 重写文件数据处理方法 - 添加文件验证和数量限制
@@ -650,14 +688,93 @@ class WeixinChannelsPlatformAdapter extends PlatformAdapter {
     }
   }
 
-  // 注意：createFileFromBase64 方法已移除，现在由基类的 processFileData 统一处理
+  /**
+   * 🚀 智能文件上传方法 - 使用FileProcessorBase的智能文件获取
+   * @param {Object} data - 包含fileIds或files的数据对象
+   */
+  async uploadFiles(data) {
+    try {
+      this.log('🚀 开始微信视频号智能文件上传流程...', {
+        hasData: !!data,
+        hasFiles: !!(data && data.files),
+        hasFileIds: !!(data && data.fileIds),
+        platform: this.platform
+      });
+
+      // 🚀 使用继承的智能文件处理方法（支持即时预览和分块下载）
+      const filesToUpload = await this.processFileData(data);
+
+      if (!filesToUpload || filesToUpload.length === 0) {
+        this.log('⚠️ 没有可上传的文件');
+        return;
+      }
+
+      this.log('📁 准备上传文件:', filesToUpload.map(f => ({
+        name: f.name,
+        size: f.size,
+        type: f.type
+      })));
+
+      // 查找文件输入控件
+      const fileInput = await this.findFileInput();
+      if (!fileInput) {
+        throw new Error('未找到文件输入控件');
+      }
+
+      // 使用DataTransfer API上传文件
+      await this.injectFilesToInput(fileInput, filesToUpload);
+
+      this.log('✅ 智能文件上传成功');
+
+    } catch (error) {
+      this.logError('智能文件上传失败', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 🚀 将文件注入到输入控件（优化版本）
+   * @param {HTMLElement} fileInput - 文件输入控件
+   * @param {Array} files - 文件数组
+   */
+  async injectFilesToInput(fileInput, files) {
+    try {
+      this.log('📤 开始注入文件到输入控件', { count: files.length });
+
+      // 使用DataTransfer API
+      const dataTransfer = new DataTransfer();
+      files.forEach(file => {
+        dataTransfer.items.add(file);
+      });
+
+      fileInput.files = dataTransfer.files;
+
+      // 🚀 使用统一的事件触发方法
+      this._triggerEvents(fileInput, ['input', 'change']);
+
+      this.log('✅ 文件已注入到输入控件');
+
+    } catch (error) {
+      this.log('❌ 文件注入失败:', error);
+      throw new Error('文件注入失败: ' + error.message);
+    }
+  }
+
+  // 🚀 优化：删除旧的createFileFromBase64方法，现在由FileProcessorBase统一处理
 }
 
 /**
- * 检查基类依赖
+ * 🚀 检查FileProcessorBase依赖
  */
 async function checkBaseClasses() {
-  return await BaseClassLoader.checkBaseClasses('微信视频号');
+  // 检查FileProcessorBase是否可用
+  if (!window.FileProcessorBase) {
+    console.error('微信视频号适配器：FileProcessorBase未加载');
+    return false;
+  }
+
+  console.log('✅ 微信视频号适配器：FileProcessorBase依赖检查通过');
+  return true;
 }
 
 /**

@@ -35,13 +35,24 @@ class FileProcessorBase {
         this.log('处理Background Script文件...');
         for (const fileId of fileIds) {
           try {
-            const file = await this.getFileFromExtension(fileId);
+            // 🚀 使用智能文件获取方法（支持分块下载）
+            const file = await this.getFileWithInstantPreview(fileId);
             if (file && file instanceof File) {
               filesToUpload.push(file);
               this.log(`获取文件成功: ${file.name} (${file.size} bytes)`);
             }
           } catch (error) {
-            this.log(`文件获取失败: ${fileId}`, error.message);
+            this.log(`智能文件获取失败，尝试原有方法: ${fileId}`, error.message);
+            // 降级到原有方法
+            try {
+              const file = await this.getFileFromExtension(fileId);
+              if (file && file instanceof File) {
+                filesToUpload.push(file);
+                this.log(`降级获取文件成功: ${file.name} (${file.size} bytes)`);
+              }
+            } catch (fallbackError) {
+              this.log(`文件获取完全失败: ${fileId}`, fallbackError.message);
+            }
           }
         }
       }
@@ -315,6 +326,102 @@ class FileProcessorBase {
       'video/quicktime': 'mov'
     };
     return mimeToExt[mimeType] || 'bin';
+  }
+
+  // 🚀 第二阶段：智能文件获取方法（支持分块下载）
+  async getFileWithInstantPreview(fileId) {
+    try {
+      this.log(`🚀 开始智能文件获取: ${fileId}`);
+
+      // 1. 获取传输策略
+      const routingInfo = await chrome.runtime.sendMessage({
+        action: 'getFileWithSmartRouting',
+        fileId: fileId
+      });
+
+      if (!routingInfo.success) {
+        throw new Error(routingInfo.error);
+      }
+
+      // 2. 根据策略选择传输方式
+      if (routingInfo.transferMode === 'chunked') {
+        this.log(`📦 大文件检测，使用分块下载: ${routingInfo.metadata.name}`);
+        return await this.downloadFileInChunks(fileId, routingInfo.metadata);
+      } else {
+        this.log(`📄 小文件检测，使用直接传输: ${routingInfo.metadata.name}`);
+        return await this.createFileFromDirectTransfer(routingInfo);
+      }
+
+    } catch (error) {
+      this.logError('智能文件获取失败:', error);
+      throw error;
+    }
+  }
+
+  // 分块下载实现
+  async downloadFileInChunks(fileId, metadata) {
+    const chunks = [];
+    const totalChunks = metadata.totalChunks;
+
+    this.log(`📦 开始分块下载: ${metadata.name} (${totalChunks} 块)`);
+
+    // 并行下载多个分块（提升性能）
+    const maxConcurrent = 3; // 最大并发数
+
+    for (let i = 0; i < totalChunks; i += maxConcurrent) {
+      const batchPromises = [];
+
+      for (let j = 0; j < maxConcurrent && (i + j) < totalChunks; j++) {
+        const chunkIndex = i + j;
+        batchPromises.push(this.downloadSingleChunk(fileId, chunkIndex));
+      }
+
+      const batchResults = await Promise.all(batchPromises);
+      chunks.push(...batchResults);
+    }
+
+    // 按索引排序
+    chunks.sort((a, b) => a.index - b.index);
+
+    // 重组文件
+    const uint8Arrays = chunks.map(chunk => new Uint8Array(chunk.data));
+    const blob = new Blob(uint8Arrays, { type: metadata.type });
+
+    this.log(`✅ 分块下载完成: ${metadata.name} (${blob.size} bytes)`);
+
+    return new File([blob], metadata.name, {
+      type: metadata.type,
+      lastModified: metadata.lastModified
+    });
+  }
+
+  // 下载单个分块
+  async downloadSingleChunk(fileId, chunkIndex) {
+    const response = await chrome.runtime.sendMessage({
+      action: 'getFileChunk',
+      fileId: fileId,
+      chunkIndex: chunkIndex
+    });
+
+    if (!response.success) {
+      throw new Error(`分块下载失败: ${response.error}`);
+    }
+
+    return {
+      index: chunkIndex,
+      data: response.chunkData
+    };
+  }
+
+  // 直接传输文件创建
+  createFileFromDirectTransfer(routingInfo) {
+    const uint8Array = new Uint8Array(routingInfo.arrayData);
+    const blob = new Blob([uint8Array], { type: routingInfo.metadata.type });
+
+    return new File([blob], routingInfo.metadata.name, {
+      type: routingInfo.metadata.type,
+      lastModified: routingInfo.metadata.lastModified
+    });
   }
 
   // 抽象方法，由子类实现

@@ -209,9 +209,9 @@ class XiaohongshuDependencyManager {
   static validateDependencies() {
     const dependencies = [
       {
-        name: 'BasePlatformAdapter',
-        check: () => window.MomentDots?.BasePlatformAdapter || window.BasePlatformAdapter,
-        error: 'BasePlatformAdapter not found. Please ensure PlatformAdapter.js is loaded first.'
+        name: 'FileProcessorBase',
+        check: () => window.FileProcessorBase,
+        error: 'FileProcessorBase not found. Please ensure FileProcessorBase.js is loaded first.'
       },
       {
         name: 'UniversalContentInjector',
@@ -228,11 +228,11 @@ class XiaohongshuDependencyManager {
   }
 
   /**
-   * 获取基础适配器类
-   * @returns {Function} 基础适配器类
+   * 获取FileProcessorBase类（支持智能文件获取）
+   * @returns {Function} FileProcessorBase类
    */
-  static getBasePlatformAdapter() {
-    return window.MomentDots?.BasePlatformAdapter || window.BasePlatformAdapter;
+  static getFileProcessorBase() {
+    return window.FileProcessorBase;
   }
 
   /**
@@ -245,21 +245,16 @@ class XiaohongshuDependencyManager {
 }
 
 /**
- * 小红书平台适配器类 - 重构优化版本
- * 继承MutationObserverBase，消除重复代码，提升性能
+ * 小红书平台适配器类 - 升级为FileProcessorBase
+ * 🚀 继承FileProcessorBase以支持智能文件获取和即时预览功能
  */
-class XiaohongshuAdapter extends XiaohongshuDependencyManager.getBasePlatformAdapter() {
+class XiaohongshuAdapter extends XiaohongshuDependencyManager.getFileProcessorBase() {
   constructor() {
     // 使用依赖管理器验证依赖
     XiaohongshuDependencyManager.validateDependencies();
 
-    super('xiaohongshu');
-
-    // 确保platform属性正确设置
-    this.platform = 'xiaohongshu';
-
-    // 初始化MutationObserver基类功能
-    this.mutationObserverBase = new MutationObserverBase('xiaohongshu');
+    // 🚀 继承FileProcessorBase以获得智能文件获取能力
+    super('xiaohongshu', {});
 
     // 使用配置管理器
     this.configManager = new XiaohongshuConfigManager();
@@ -277,16 +272,16 @@ class XiaohongshuAdapter extends XiaohongshuDependencyManager.getBasePlatformAda
     this.elementCache = new Map();
     this.cacheTimeout = this.config.performance.cacheTimeout;
 
-    this.log('小红书适配器初始化完成 - 使用统一配置和依赖管理，性能缓存已启用');
+    this.log('🚀 小红书适配器初始化完成 - 已升级为FileProcessorBase，支持智能文件获取');
   }
 
   /**
-   * 清理资源 - 重写基类方法
+   * 🚀 清理资源 - 优化版本（使用FileProcessorBase）
    */
   cleanup() {
-    // 清理MutationObserver基类的资源
-    if (this.mutationObserverBase) {
-      this.mutationObserverBase.cleanupAllObservers();
+    // 调用父类的清理方法
+    if (super.cleanup) {
+      super.cleanup();
     }
 
     // 清理DOM元素缓存
@@ -298,21 +293,22 @@ class XiaohongshuAdapter extends XiaohongshuDependencyManager.getBasePlatformAda
   }
 
   /**
-   * 获取性能报告 - 整合基类数据
+   * 🚀 获取性能报告 - 优化版本
    */
   getPerformanceReport() {
-    const baseReport = this.mutationObserverBase ?
-                      this.mutationObserverBase.getPerformanceReport() :
+    const baseReport = super.getPerformanceReport ?
+                      super.getPerformanceReport() :
                       { platform: 'xiaohongshu', totalTime: 0, successRate: 0, operationCount: 0 };
 
     return {
       ...baseReport,
-      adapterVersion: '2.0.0-refactored',
+      adapterVersion: '3.0.0-fileprocessor',
       optimizations: [
-        'MutationObserver基类集成',
-        '重复代码消除',
-        '统一配置管理',
-        '性能监控优化'
+        'FileProcessorBase继承',
+        '智能文件获取支持',
+        '即时预览功能',
+        '分块下载支持',
+        '重复代码消除'
       ]
     };
   }
@@ -872,16 +868,17 @@ class XiaohongshuAdapter extends XiaohongshuDependencyManager.getBasePlatformAda
   }
 
   /**
-   * 智能页面就绪检测 - 使用基类实现
+   * 🚀 智能页面就绪检测 - 简化版本（移除MutationObserver依赖）
    * @param {string} pageType - 页面类型 ('homepage', 'upload', 'edit')
    * @param {number} maxWaitTime - 最大等待时间（毫秒）
    * @returns {Promise<boolean>} - 页面是否就绪
    */
   async waitForPageReady(pageType, maxWaitTime = 5000) {
-    const readyChecker = () => {
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < maxWaitTime) {
       switch (pageType) {
         case 'homepage':
-          // 检查首页关键元素
           if (this.findPublishImageButton()) {
             this.log('✅ 首页就绪 - 发布按钮可用');
             return true;
@@ -889,7 +886,6 @@ class XiaohongshuAdapter extends XiaohongshuDependencyManager.getBasePlatformAda
           break;
 
         case 'upload':
-          // 检查上传页面关键元素
           const fileInput = document.querySelector('input[type="file"]');
           if (fileInput && !fileInput.disabled) {
             this.log('✅ 上传页面就绪 - 文件输入可用');
@@ -898,7 +894,6 @@ class XiaohongshuAdapter extends XiaohongshuDependencyManager.getBasePlatformAda
           break;
 
         case 'edit':
-          // 检查编辑页面关键元素
           const titleInput = document.querySelector('input[placeholder*="标题"]');
           const contentEditor = document.querySelector('div[contenteditable="true"]');
           if (titleInput && contentEditor) {
@@ -907,14 +902,12 @@ class XiaohongshuAdapter extends XiaohongshuDependencyManager.getBasePlatformAda
           }
           break;
       }
-      return false;
-    };
 
-    return await this.mutationObserverBase.waitForPageReady(
-      pageType,
-      readyChecker,
-      maxWaitTime
-    );
+      await this.delay(200); // 每200ms检查一次
+    }
+
+    this.log('⚠️ 页面就绪检测超时');
+    return false;
   }
 
   /**
@@ -986,19 +979,15 @@ class XiaohongshuAdapter extends XiaohongshuDependencyManager.getBasePlatformAda
         await this.waitForPageLoad();
       }
 
-      // 2. 使用性能监控的智能等待首页就绪
-      const homepageReady = await this.mutationObserverBase.measurePerformance('首页就绪检测', async () => {
-        return await this.waitForPageReady('homepage', 2000); // 减少到2秒
-      });
+      // 2. 智能等待首页就绪
+      const homepageReady = await this.waitForPageReady('homepage', 2000);
 
       if (!homepageReady) {
         this.log('⚠️ 首页就绪检测超时，使用备用策略');
       }
 
-      // 3. 使用性能监控的MutationObserver查找发布图文笔记按钮
-      const publishButton = await this.mutationObserverBase.measurePerformance('查找发布按钮', async () => {
-        return await this.findPublishImageButtonOptimized();
-      });
+      // 3. 查找发布图文笔记按钮
+      const publishButton = await this.findPublishImageButtonOptimized();
 
       if (!publishButton) {
         throw new Error('未找到发布图文笔记按钮');
@@ -1010,10 +999,8 @@ class XiaohongshuAdapter extends XiaohongshuDependencyManager.getBasePlatformAda
       const beforeClickUrl = window.location.href;
       await this.performEnhancedClick(publishButton);
 
-      // 5. 使用性能监控的智能页面跳转监控
-      const navigationSuccess = await this.mutationObserverBase.measurePerformance('页面跳转监控', async () => {
-        return await this.monitorNavigationToUpload();
-      });
+      // 5. 智能页面跳转监控
+      const navigationSuccess = await this.monitorNavigationToUpload();
 
       if (!navigationSuccess) {
         throw new Error('页面跳转监控失败');
@@ -1355,31 +1342,46 @@ class XiaohongshuAdapter extends XiaohongshuDependencyManager.getBasePlatformAda
   }
 
   /**
-   * 优化的发布图文笔记按钮查找 - 使用基类实现
+   * 🚀 优化的发布图文笔记按钮查找 - 简化版本
    * @returns {Promise<HTMLElement|null>} - 找到的按钮元素
    */
   async findPublishImageButtonOptimized() {
-    return await this.mutationObserverBase.findButtonOptimized(
-      () => this.findPublishImageButton(),
-      3000,
-      '小红书发布图文笔记按钮'
-    );
+    const maxRetries = 15; // 3秒，每200ms一次
+
+    for (let i = 0; i < maxRetries; i++) {
+      const button = this.findPublishImageButton();
+      if (button) {
+        this.log('✅ 找到发布图文笔记按钮');
+        return button;
+      }
+      await this.delay(200);
+    }
+
+    this.log('⚠️ 发布图文笔记按钮查找超时');
+    return null;
   }
 
   /**
-   * 智能元素等待方法 - 使用基类实现
+   * 🚀 智能元素等待方法 - 简化版本
    * @param {string} selector - CSS选择器
    * @param {number} timeout - 超时时间（毫秒）
    * @param {boolean} checkVisible - 是否检查元素可见性
    * @returns {Promise<HTMLElement|null>} - 找到的元素
    */
   async waitForElementSmart(selector, timeout = 3000, checkVisible = true) {
-    return await this.mutationObserverBase.waitForElementSmart(
-      selector,
-      timeout,
-      checkVisible,
-      `小红书元素: ${selector}`
-    );
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < timeout) {
+      const element = document.querySelector(selector);
+      if (element && (!checkVisible || element.offsetParent !== null)) {
+        this.log(`✅ 找到元素: ${selector}`);
+        return element;
+      }
+      await this.delay(200);
+    }
+
+    this.log(`⚠️ 元素查找超时: ${selector}`);
+    return null;
   }
 
 
@@ -1579,26 +1581,30 @@ class XiaohongshuAdapter extends XiaohongshuDependencyManager.getBasePlatformAda
   }
 
   /**
-   * 处理视频上传（新增功能）
-   * @param {Object} data - 包含files的数据对象
+   * 🚀 处理视频上传（优化版本 - 统一使用继承的智能文件获取）
+   * @param {Object} data - 包含fileIds或files的数据对象
    * @returns {Promise<Object>} - 上传结果
    */
   async handleVideoUpload(data) {
     try {
-      this.log('🎬 开始小红书视频上传流程...', {
+      this.log('🎬 开始小红书智能视频上传流程...', {
         hasData: !!data,
         hasFiles: !!(data && data.files),
+        hasFileIds: !!(data && data.fileIds),
         platform: this.platform,
         dataKeys: Object.keys(data || {})
       });
 
-      if (!data || !data.files || !Array.isArray(data.files) || data.files.length === 0) {
-        this.log('⚠️ 没有提供视频文件，跳过上传');
+      // 🚀 使用继承的智能文件处理方法（统一逻辑，避免重复代码）
+      const filesToProcess = await this.processFileData(data);
+
+      if (!filesToProcess || filesToProcess.length === 0) {
+        this.log('⚠️ 没有可处理的视频文件');
         return { success: false, needsFiles: true, message: '没有视频文件' };
       }
 
       // 验证和过滤视频文件
-      const validFiles = this.validateVideoFiles(data.files);
+      const validFiles = this.validateVideoFiles(filesToProcess);
       if (validFiles.length === 0) {
         this.log('⚠️ 没有有效的视频文件');
         return { success: false, needsFiles: true, message: '没有有效的视频文件' };
@@ -1616,26 +1622,26 @@ class XiaohongshuAdapter extends XiaohongshuDependencyManager.getBasePlatformAda
       const uploadSuccess = await this.uploadVideoFiles(fileInput, validFiles);
 
       if (uploadSuccess) {
-        this.log('✅ 视频文件上传成功');
-        return { success: true, uploadedCount: validFiles.length };
+        this.log('✅ 智能视频文件上传成功');
+        return { success: true, uploadedCount: validFiles.length, method: 'smart_upload' };
       } else {
         throw new Error('视频文件上传失败');
       }
 
     } catch (error) {
-      this.logError('视频上传处理失败', error);
+      this.logError('智能视频上传处理失败', error);
       return { success: false, error: error.message };
     }
   }
 
   /**
-   * 处理图片上传（参考抖音适配器的实现）
+   * 🚀 处理图片上传（升级为智能文件获取版本）
    * @param {Object} data - 包含fileIds或files的数据对象
    * @returns {Promise<Object>} - 上传结果
    */
   async handleImageUpload(data) {
     try {
-      this.log('📁 开始小红书图片上传流程...', {
+      this.log('📁 开始小红书智能图片上传流程...', {
         hasData: !!data,
         hasFiles: !!(data && data.files),
         hasFileIds: !!(data && data.fileIds),
@@ -1643,8 +1649,8 @@ class XiaohongshuAdapter extends XiaohongshuDependencyManager.getBasePlatformAda
         dataKeys: Object.keys(data || {})
       });
 
-      // 使用标准文件处理方法获取File对象（参考抖音实现）
-      const filesToUpload = await this.processFileDataWithFallback(data);
+      // 🚀 使用继承的智能文件处理方法（支持即时预览和分块下载）
+      const filesToUpload = await this.processFileData(data);
 
       if (!filesToUpload || filesToUpload.length === 0) {
         this.log('📁 没有图片需要上传，但这可能导致无法进入编辑页面');
@@ -1817,88 +1823,7 @@ class XiaohongshuAdapter extends XiaohongshuDependencyManager.getBasePlatformAda
            (currentUrl.includes('edit') || currentUrl.includes('content'));
   }
 
-  /**
-   * 文件处理方法（带备用方案）
-   * @param {Object} data - 包含fileIds或files的数据对象
-   * @returns {Array} File对象数组
-   */
-  async processFileDataWithFallback(data) {
-    // 优先使用继承的processFileData方法
-    if (typeof this.processFileData === 'function') {
-      this.log('📁 使用继承的processFileData方法');
-      return await this.processFileData(data);
-    }
-
-    // 备用方案：自实现文件处理逻辑（参考BasePlatformAdapter）
-    this.log('📁 使用备用文件处理方案');
-    const { files, fileIds } = data;
-    let filesToUpload = [];
-
-    if (fileIds && fileIds.length > 0) {
-      // 新方案：从Background Script获取文件
-      this.log('📁 使用新的Background Script文件管理系统...');
-      try {
-        for (const fileId of fileIds) {
-          this.log(`📁 请求文件: ${fileId}`);
-
-          const response = await chrome.runtime.sendMessage({
-            action: 'getFile',
-            fileId: fileId
-          });
-
-          if (response.success && response.arrayData) {
-            const uint8Array = new Uint8Array(response.arrayData);
-            const blob = new Blob([uint8Array], { type: response.metadata.type });
-            const file = new File([blob], response.metadata.name, {
-              type: response.metadata.type,
-              lastModified: response.metadata.lastModified
-            });
-
-            filesToUpload.push(file);
-            this.log(`📁 成功获取文件: ${file.name} (${file.size} bytes)`);
-          } else {
-            this.log(`⚠️ 警告: 文件ID ${fileId} 对应的文件未找到: ${response.error || 'Unknown error'}`);
-          }
-        }
-      } catch (error) {
-        this.log('❌ 从Background Script获取文件失败:', error);
-        // 降级到原有方案
-        filesToUpload = this.collectLegacyFiles(data);
-      }
-    } else {
-      // 原有方案：使用传统的文件数据
-      this.log('📁 使用传统文件管理系统...');
-      filesToUpload = this.collectLegacyFiles(data);
-    }
-
-    return filesToUpload;
-  }
-
-  /**
-   * 收集传统文件数据（降级方案）
-   * @param {Object} data - 数据对象
-   * @returns {Array} File对象数组
-   */
-  collectLegacyFiles(data) {
-    const allFiles = [];
-
-    // 从data.files收集
-    if (data.files && Array.isArray(data.files)) {
-      allFiles.push(...data.files);
-    }
-
-    // 从data.images收集（兼容旧版本）
-    if (data.images && Array.isArray(data.images)) {
-      data.images.forEach(imageData => {
-        if (imageData.file) {
-          allFiles.push(imageData.file);
-        }
-      });
-    }
-
-    this.log(`📁 收集到 ${allFiles.length} 个传统文件`);
-    return allFiles;
-  }
+  // 🚀 优化：删除备用文件处理方法，现在直接使用继承的智能文件获取功能
   /**
    * 查找文件输入控件
    * @returns {Promise<HTMLElement|null>} - 找到的文件输入控件

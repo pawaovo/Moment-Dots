@@ -69,12 +69,12 @@
       "matches": ["https://weibo.com/*", "https://m.weibo.cn/*", "https://card.weibo.com/*"],
       "js": [
         "content-scripts/shared/UniversalContentInjector.js",
+        "content-scripts/shared/FileProcessorBase.js",
         "content-scripts/shared/PlatformAdapter.js",
         "content-scripts/shared/AdapterInitializer.js",
         "content-scripts/adapters/common/BaseConfigManager.js",
         "content-scripts/adapters/common/MutationObserverBase.js",
         "content-scripts/adapters/common/BaseClassLoader.js",
-        "content-scripts/shared/FileProcessorBase.js",
         "content-scripts/shared/PlatformConfigBase.js",
         "content-scripts/adapters/weibo.js"
       ],
@@ -84,12 +84,12 @@
       "matches": ["https://www.xiaohongshu.com/*", "https://creator.xiaohongshu.com/*"],
       "js": [
         "content-scripts/shared/UniversalContentInjector.js",
+        "content-scripts/shared/FileProcessorBase.js",
         "content-scripts/shared/PlatformAdapter.js",
         "content-scripts/shared/AdapterInitializer.js",
         "content-scripts/adapters/common/BaseConfigManager.js",
         "content-scripts/adapters/common/MutationObserverBase.js",
         "content-scripts/adapters/common/BaseClassLoader.js",
-        "content-scripts/shared/FileProcessorBase.js",
         "content-scripts/shared/PlatformConfigBase.js",
         "content-scripts/adapters/xiaohongshu.js"
       ],
@@ -99,12 +99,12 @@
       "matches": ["https://web.okjike.com/*"],
       "js": [
         "content-scripts/shared/UniversalContentInjector.js",
+        "content-scripts/shared/FileProcessorBase.js",
         "content-scripts/shared/PlatformAdapter.js",
         "content-scripts/shared/AdapterInitializer.js",
         "content-scripts/adapters/common/BaseConfigManager.js",
         "content-scripts/adapters/common/MutationObserverBase.js",
         "content-scripts/adapters/common/BaseClassLoader.js",
-        "content-scripts/shared/FileProcessorBase.js",
         "content-scripts/shared/PlatformConfigBase.js",
         "content-scripts/adapters/jike.js"
       ],
@@ -114,12 +114,12 @@
       "matches": ["https://creator.douyin.com/*"],
       "js": [
         "content-scripts/shared/UniversalContentInjector.js",
+        "content-scripts/shared/FileProcessorBase.js",
         "content-scripts/shared/PlatformAdapter.js",
         "content-scripts/shared/AdapterInitializer.js",
         "content-scripts/adapters/common/BaseConfigManager.js",
         "content-scripts/adapters/common/MutationObserverBase.js",
         "content-scripts/adapters/common/BaseClassLoader.js",
-        "content-scripts/shared/FileProcessorBase.js",
         "content-scripts/shared/PlatformConfigBase.js",
         "content-scripts/adapters/douyin.js"
       ],
@@ -129,12 +129,12 @@
       "matches": ["https://x.com/*"],
       "js": [
         "content-scripts/shared/UniversalContentInjector.js",
+        "content-scripts/shared/FileProcessorBase.js",
         "content-scripts/shared/PlatformAdapter.js",
         "content-scripts/shared/AdapterInitializer.js",
         "content-scripts/adapters/common/BaseConfigManager.js",
         "content-scripts/adapters/common/MutationObserverBase.js",
         "content-scripts/adapters/common/BaseClassLoader.js",
-        "content-scripts/shared/FileProcessorBase.js",
         "content-scripts/shared/PlatformConfigBase.js",
         "content-scripts/adapters/x.js"
       ],
@@ -145,12 +145,12 @@
       "matches": ["https://t.bilibili.com/*", "https://member.bilibili.com/*"],
       "js": [
         "content-scripts/shared/UniversalContentInjector.js",
+        "content-scripts/shared/FileProcessorBase.js",
         "content-scripts/shared/PlatformAdapter.js",
         "content-scripts/shared/AdapterInitializer.js",
         "content-scripts/adapters/common/BaseConfigManager.js",
         "content-scripts/adapters/common/MutationObserverBase.js",
         "content-scripts/adapters/common/BaseClassLoader.js",
-        "content-scripts/shared/FileProcessorBase.js",
         "content-scripts/shared/PlatformConfigBase.js",
         "content-scripts/adapters/bilibili.js"
       ],
@@ -160,12 +160,12 @@
       "matches": ["https://channels.weixin.qq.com/*"],
       "js": [
         "content-scripts/shared/UniversalContentInjector.js",
+        "content-scripts/shared/FileProcessorBase.js",
         "content-scripts/shared/PlatformAdapter.js",
         "content-scripts/shared/AdapterInitializer.js",
         "content-scripts/adapters/common/BaseConfigManager.js",
         "content-scripts/adapters/common/MutationObserverBase.js",
         "content-scripts/adapters/common/BaseClassLoader.js",
-        "content-scripts/shared/FileProcessorBase.js",
         "content-scripts/shared/PlatformConfigBase.js",
         "content-scripts/adapters/weixinchannels.js"
       ],
