@@ -26,8 +26,8 @@ class FileStorageService {
     this.db = null;
     
     // 配置选项
-    this.maxFileSize = options.maxFileSize || 20 * 1024 * 1024 * 1024; // 20GB
-    this.maxStorageSize = options.maxStorageSize || 100 * 1024 * 1024 * 1024; // 100GB
+    this.maxFileSize = options.maxFileSize || 2 * 1024 * 1024 * 1024; // 2GB
+    this.maxStorageSize = options.maxStorageSize || 10 * 1024 * 1024 * 1024; // 10GB
     this.defaultMaxAge = options.defaultMaxAge || 24 * 60 * 60 * 1000; // 24小时
   }
 
