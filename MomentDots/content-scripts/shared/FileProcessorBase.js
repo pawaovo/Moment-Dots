@@ -519,15 +519,23 @@ class FileProcessorBase {
       await Promise.all(downloadPromises);
       this.log(`✅ 完成分配的分块下载: ${myAssignment.length}个分块`);
 
-      // 2. 等待所有平台完成下载
-      await this.waitForDistributedDownloadComplete(sessionId);
+      // 🚀 优化：检查文件是否已经完整可用，避免不必要等待
+      const fileStatus = await chrome.runtime.sendMessage({
+        action: 'checkFileComplete',
+        fileId: fileId
+      });
 
-      // 3. 从Background Script获取完整文件用于平台注入
+      if (fileStatus.success && fileStatus.complete) {
+        this.log(`⚡ 文件已完整，跳过等待其他平台`);
+      } else {
+        // 2. 等待所有平台完成下载
+        this.log(`⏳ 文件未完整，等待其他平台完成`);
+        await this.waitForDistributedDownloadComplete(sessionId);
+      }
+
+      // 3. 获取完整文件并清理会话（统一处理）
       this.log(`🔄 分布式协作下载完成，现在获取完整文件用于 ${this.platform} 平台注入`);
-      this.log(`💡 协作阶段已节省50%网络传输，现在是内存到平台的快速传输`);
       const completeFile = await this.assembleCompleteFile(fileId, metadata);
-
-      // 4. 清理会话数据
       await this.cleanupDistributedSession(fileId, sessionId);
 
       return completeFile;
@@ -588,7 +596,7 @@ class FileProcessorBase {
           clearInterval(checkInterval);
           reject(error);
         }
-      }, 1000); // 每秒检查一次
+      }, 500); // 🚀 优化：500ms检查一次，提升响应速度
 
       // 超时处理
       setTimeout(() => {

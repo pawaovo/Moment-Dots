@@ -1693,6 +1693,27 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
+  // 🚀 分布式下载API：检查文件是否完整
+  if (message.action === 'checkFileComplete') {
+    try {
+      const { fileId } = message;
+      const fileData = backgroundFileService.getFile(fileId);
+      const metadata = backgroundFileService.getFileMetadata(fileId);
+
+      // 检查文件是否存在且完整
+      const isComplete = fileData && metadata && fileData.blob.size === metadata.size;
+
+      sendResponse({
+        success: true,
+        complete: isComplete
+      });
+    } catch (error) {
+      console.error('Failed to check file complete:', error);
+      sendResponse({ success: false, error: error.message });
+    }
+    return true;
+  }
+
   // 🚀 分布式下载API：清理会话
   if (message.action === 'cleanupDistributedSession') {
     try {
