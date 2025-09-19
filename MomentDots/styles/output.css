@@ -307,6 +307,49 @@ textarea {
   /* 性能优化 */
   contain: layout style;
   transform: translateZ(0); /* 启用硬件加速 */
+  /* 拖拽功能样式 */
+  cursor: grab;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* 拖拽状态样式 - 使用特定前缀避免冲突 */
+#image-preview .image-preview-container:active {
+  cursor: grabbing;
+}
+
+#image-preview .image-preview-container.md-sortable-drag {
+  transform: rotate(3deg) scale(1.05) translateZ(0);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  opacity: 0.9;
+}
+
+#image-preview .image-preview-container.md-sortable-ghost {
+  opacity: 0.3;
+  background: #f8f9fa;
+  border: 2px dashed #dee2e6;
+  border-radius: 0.5rem;
+}
+
+#image-preview .image-preview-container.md-sortable-chosen {
+  transform: scale(1.02) translateZ(0);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* 拖拽提示文字 */
+.drag-hint {
+  font-size: 11px;
+  color: #6c757d;
+  text-align: center;
+  margin-top: 4px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+  user-select: none;
+}
+
+#image-preview:hover .drag-hint {
+  opacity: 1;
 }
 
 .image-preview-container img {

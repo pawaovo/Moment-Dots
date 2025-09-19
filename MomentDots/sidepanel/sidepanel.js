@@ -21,6 +21,12 @@ async function initializeSidepanel() {
   console.log('初始化侧边栏...');
 
   try {
+    // 初始化文件进度管理器
+    if (typeof FileProgressManager !== 'undefined' && !window.fileProgressManager) {
+      window.fileProgressManager = new FileProgressManager();
+      console.log('FileProgressManager initialized in sidepanel');
+    }
+
     // 获取DOM元素
     elements.root = document.getElementById('sidepanel-root');
     elements.statusView = document.getElementById('statusView');
@@ -196,7 +202,7 @@ function createStatusItem(result) {
   const platformIcon = generatePlatformIcon(platform);
 
   return `
-    <div class="px-4 py-6 border-b border-gray-100 hover:bg-gray-50 transition-colors">
+    <div class="px-4 py-6 border-b border-gray-100 hover:bg-gray-50 transition-colors" data-platform-id="${platform.id}">
       <div class="flex items-center justify-between">
         <!-- 左侧：平台图标 + 名称 -->
         <div class="flex items-center space-x-3 flex-1">
@@ -208,14 +214,22 @@ function createStatusItem(result) {
           </div>
         </div>
 
-        <!-- 中间：发布状态 -->
-        <div class="flex items-center ${statusConfig.textColor} mx-3">
-          ${statusConfig.icon}
-          <span class="text-sm ml-1">${statusConfig.text}</span>
+        <!-- 中间：进度条和发布状态 -->
+        <div class="flex items-center flex-1 mx-3 space-x-3">
+          <!-- 进度条区域 -->
+          <div class="w-16">
+            ${generateFileProgressHTML(result)}
+          </div>
+
+          <!-- 发布状态区域 -->
+          <div class="flex items-center ${statusConfig.textColor}">
+            ${statusConfig.icon}
+            <span class="text-sm ml-1">${statusConfig.text}</span>
+          </div>
         </div>
 
-        <!-- 右侧：重试按钮 -->
-        <div class="flex-shrink-0">
+        <!-- 右侧：重试按钮（固定位置） -->
+        <div class="flex-shrink-0 w-8">
           ${shouldShowRetryButton(result.status) ? `
             <button data-platform-id="${platform.id}" data-action="retry"
                     class="retry-button w-8 h-8 flex items-center justify-center text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
@@ -248,6 +262,39 @@ function generatePlatformIcon(platform) {
   return `<div class="w-6 h-6 ${platform.color || 'bg-gray-500'} rounded flex items-center justify-center text-white text-xs font-medium">
        ${platform.name.charAt(0)}
      </div>`;
+}
+
+// 生成文件处理进度条HTML - 优化版本
+function generateFileProgressHTML(result) {
+  // 只在短视频页面且有文件处理时显示进度条
+  if (!window.fileProgressManager || !window.fileProgressManager.isActive) {
+    return '';
+  }
+
+  const platformId = extractPlatformId(result);
+  if (!platformId) {
+    return '';
+  }
+
+  const progressData = window.fileProgressManager.getPlatformProgress(platformId);
+  if (!progressData) {
+    return '';
+  }
+
+  const { overallProgress } = progressData;
+
+  return `
+    <div class="file-progress-container">
+      <div class="file-progress-bar">
+        <div class="file-progress-fill" style="width: ${overallProgress}%"></div>
+      </div>
+    </div>
+  `;
+}
+
+// 提取平台ID的统一方法
+function extractPlatformId(result) {
+  return typeof result.platform === 'string' ? result.platform : result.platform?.id;
 }
 
 // 计算发布统计信息
@@ -446,6 +493,12 @@ function setupMessageListeners() {
       case 'publishStateReset':
         handlePublishStateReset(message.data);
         break;
+      case 'fileProgressStateUpdate':
+        handleFileProgressStateUpdate(message);
+        break;
+      case 'singlePlatformProgressUpdate':
+        handleSinglePlatformProgressUpdate(message);
+        break;
       default:
         console.log('未知消息类型:', message.action);
     }
@@ -521,6 +574,11 @@ function handlePublishStateReset(data) {
     lastUpdate: new Date()
   });
 
+  // 重置文件进度状态
+  if (window.fileProgressManager) {
+    window.fileProgressManager.resetProgress();
+  }
+
   // 重新渲染界面
   renderSidepanel();
 
@@ -528,6 +586,58 @@ function handlePublishStateReset(data) {
   if (data.selectedPlatforms?.length > 0) {
     console.log(`✅ 侧边栏状态已重置，当前选择平台:`, data.selectedPlatforms);
   }
+}
+
+// 处理文件进度状态更新
+function handleFileProgressStateUpdate(message) {
+  console.log('📊 侧边栏收到文件进度更新:', message);
+
+  const { progressData } = message;
+
+  // 更新文件进度管理器的状态
+  if (window.fileProgressManager && progressData) {
+    // 直接更新内部状态
+    window.fileProgressManager.isActive = progressData.isActive;
+    window.fileProgressManager.currentFileInfo = progressData.currentFileInfo;
+
+    // 更新平台进度数据
+    if (progressData.platformProgress) {
+      window.fileProgressManager.platformProgress.clear();
+      Object.entries(progressData.platformProgress).forEach(([platformId, data]) => {
+        window.fileProgressManager.platformProgress.set(platformId, data);
+      });
+    }
+
+    // 重新渲染侧边栏以显示进度
+    renderSidepanel();
+  }
+}
+
+// 处理单个平台进度更新
+function handleSinglePlatformProgressUpdate(message) {
+  const { platformId, progressData } = message;
+
+  if (!window.fileProgressManager || !platformId || !progressData) {
+    return;
+  }
+
+  // 更新单个平台的进度数据
+  window.fileProgressManager.platformProgress.set(platformId, progressData);
+
+  // 只更新对应的进度条，避免全量重渲染
+  updateSingleProgressBar(platformId, progressData);
+}
+
+// 更新单个进度条 - 性能优化
+function updateSingleProgressBar(platformId, progressData) {
+  const progressElements = document.querySelectorAll('.file-progress-fill');
+
+  progressElements.forEach(element => {
+    const container = element.closest('[data-platform-id]');
+    if (container && container.dataset.platformId === platformId) {
+      element.style.width = `${progressData.overallProgress}%`;
+    }
+  });
 }
 
 // 处理平台优化状态更新

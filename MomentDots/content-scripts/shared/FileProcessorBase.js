@@ -363,19 +363,25 @@ class FileProcessorBase {
     try {
       this.log(`🚀 启动分布式协作下载: ${metadata.name} (平台: ${this.platform})`);
 
+      // 报告开始处理
+      this.reportFileProgress('DISTRIBUTED_DOWNLOAD', 'INIT', 10, '初始化分布式下载');
+
       // 直接启动分布式下载会话（Background Script会处理协调）
       const distributedSession = await this.initiateDistributedDownload(fileId, metadata);
       if (distributedSession.success) {
         this.log(`✅ 分布式下载会话启动成功，开始参与 (平台: ${this.platform})`);
+        this.reportFileProgress('DISTRIBUTED_DOWNLOAD', 'DOWNLOADING', 20, '开始分布式下载');
         return await this.participateInDistributedDownload(distributedSession);
       } else {
         // 降级到传统分块下载
         this.log(`⚠️ 分布式下载启动失败，降级到传统方式: ${distributedSession.error} (平台: ${this.platform})`);
+        this.reportFileProgress('DISTRIBUTED_DOWNLOAD', 'DOWNLOADING', 30, '降级到传统下载');
         return await this.downloadFileInChunks(fileId, metadata);
       }
 
     } catch (error) {
       this.logError(`分布式协作下载失败，降级到传统方式 (平台: ${this.platform}):`, error);
+      this.reportFileProgress('DISTRIBUTED_DOWNLOAD', 'DOWNLOADING', 30, '降级到传统下载');
       return await this.downloadFileInChunks(fileId, metadata);
     }
   }
@@ -518,6 +524,7 @@ class FileProcessorBase {
 
       await Promise.all(downloadPromises);
       this.log(`✅ 完成分配的分块下载: ${myAssignment.length}个分块`);
+      this.reportFileProgress('DISTRIBUTED_DOWNLOAD', 'COMPLETE', 100, '分块下载完成');
 
       // 🚀 优化：检查文件是否已经完整可用，避免不必要等待
       const fileStatus = await chrome.runtime.sendMessage({
@@ -527,16 +534,24 @@ class FileProcessorBase {
 
       if (fileStatus.success && fileStatus.complete) {
         this.log(`⚡ 文件已完整，跳过等待其他平台`);
+        this.reportFileProgress('FILE_ASSEMBLY', 'COMPLETE', 100, '文件已完整');
       } else {
         // 2. 等待所有平台完成下载
         this.log(`⏳ 文件未完整，等待其他平台完成`);
+        this.reportFileProgress('FILE_ASSEMBLY', 'WAITING', 20, '等待其他平台');
         await this.waitForDistributedDownloadComplete(sessionId);
+        this.reportFileProgress('FILE_ASSEMBLY', 'COMPLETE', 100, '等待完成');
       }
 
       // 3. 获取完整文件并清理会话（统一处理）
       this.log(`🔄 分布式协作下载完成，现在获取完整文件用于 ${this.platform} 平台注入`);
+      this.reportFileProgress('INJECTION', 'PREPARING', 20, '准备文件注入');
+
       const completeFile = await this.assembleCompleteFile(fileId, metadata);
+      this.reportFileProgress('INJECTION', 'INJECTING', 80, '注入文件中');
+
       await this.cleanupDistributedSession(fileId, sessionId);
+      this.reportFileProgress('INJECTION', 'COMPLETE', 100, '处理完成');
 
       return completeFile;
 
@@ -636,6 +651,36 @@ class FileProcessorBase {
       this.log(`🗑️ 分布式会话清理完成: ${sessionId}`);
     } catch (error) {
       this.logError('清理分布式会话失败:', error);
+    }
+  }
+
+  // 报告文件处理进度 - 优化版本
+  reportFileProgress(stage, subStage, progress, message) {
+    // 参数验证
+    if (!stage || typeof progress !== 'number') {
+      console.warn('Invalid progress parameters:', { stage, progress });
+      return;
+    }
+
+    try {
+      // 发送进度更新消息到Background Script，由其转发到侧边栏
+      chrome.runtime.sendMessage({
+        action: 'fileProgressUpdate',
+        platformId: this.platform,
+        stage: stage,
+        subStage: subStage,
+        progress: Math.min(100, Math.max(0, progress)), // 确保进度在0-100范围内
+        message: message,
+        timestamp: Date.now()
+      }).catch(error => {
+        // 忽略消息发送失败（可能是侧边栏未打开）
+        if (!error.message.includes('Receiving end does not exist')) {
+          console.warn('Failed to report file progress:', error);
+        }
+      });
+    } catch (error) {
+      // 静默处理错误，不影响主要功能
+      console.warn('Failed to report file progress:', error);
     }
   }
 

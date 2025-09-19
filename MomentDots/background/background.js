@@ -1727,6 +1727,27 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
+  // 🚀 文件进度相关API统一处理
+  const fileProgressActions = {
+    'fileProgressUpdate': 'handleProgressUpdate',
+    'fileProcessingStart': 'handleProcessingStart',
+    'fileProcessingComplete': 'handleProcessingComplete'
+  };
+
+  if (fileProgressActions[message.action]) {
+    try {
+      if (self.fileProgressManager) {
+        const methodName = fileProgressActions[message.action];
+        self.fileProgressManager[methodName](message);
+      }
+      sendResponse({ success: true });
+    } catch (error) {
+      console.error(`Failed to handle ${message.action}:`, error);
+      sendResponse({ success: false, error: error.message });
+    }
+    return true;
+  }
+
   // 🚀 分布式下载API：获取活跃平台列表
   if (message.action === 'getActivePlatforms') {
     // 清理非活跃平台并返回结果
@@ -2410,6 +2431,15 @@ function getPlatformNameById(platformId) {
     'weixin-article': '微信公众号(文章)'
   };
   return platformNames[platformId] || platformId;
+}
+
+// 初始化文件进度管理器
+try {
+  // 动态导入FileProgressManager
+  importScripts('../sidepanel/FileProgressManager.js');
+  console.log('FileProgressManager loaded successfully');
+} catch (error) {
+  console.warn('Failed to load FileProgressManager:', error);
 }
 
 

@@ -2897,6 +2897,13 @@ async function executePublish(publishData) {
 
     console.log('📤 发布数据验证通过，发送到background script...');
 
+    // 检查是否有大文件需要处理进度显示
+    const hasLargeFiles = checkForLargeFiles(publishData);
+    if (hasLargeFiles) {
+      // 初始化文件处理进度
+      initializeFileProgress(publishData);
+    }
+
     // 发送消息到后台脚本
     const response = await chrome.runtime.sendMessage({
       action: 'startPublish',
@@ -2918,6 +2925,66 @@ async function executePublish(publishData) {
     Utils.handleError(error, '发布失败');
     throw error; // 重新抛出错误以便上层处理
   }
+}
+
+// 检查是否有大文件需要处理进度显示 - 优化版本
+function checkForLargeFiles(publishData) {
+  // 只在短视频模式下显示进度
+  if (publishData.contentType !== '短视频') {
+    return false;
+  }
+
+  const LARGE_FILE_THRESHOLD = 50 * 1024 * 1024; // 50MB
+
+  // 检查实际文件大小
+  if (publishData.files && publishData.files.length > 0) {
+    return publishData.files.some(file => file.size > LARGE_FILE_THRESHOLD);
+  }
+
+  // 检查视频文件大小
+  if (publishData.videos && publishData.videos.length > 0) {
+    return publishData.videos.some(video => video.size > LARGE_FILE_THRESHOLD);
+  }
+
+  // 如果有fileIds，假设是大文件（因为无法直接获取大小）
+  return !!(publishData.fileIds && publishData.fileIds.length > 0);
+}
+
+// 初始化文件处理进度
+function initializeFileProgress(publishData) {
+  try {
+    // 获取平台ID列表
+    const platformIds = publishData.platforms.map(p => p.id);
+
+    // 构建文件信息
+    const fileInfo = {
+      contentType: publishData.contentType,
+      fileCount: (publishData.files?.length || 0) + (publishData.videos?.length || 0),
+      totalSize: calculateTotalFileSize(publishData),
+      timestamp: Date.now()
+    };
+
+    // 发送文件处理开始消息
+    chrome.runtime.sendMessage({
+      action: 'fileProcessingStart',
+      fileInfo: fileInfo,
+      platformIds: platformIds
+    }).catch(error => {
+      console.warn('Failed to initialize file progress:', error);
+    });
+
+    console.log('📊 文件处理进度已初始化:', { fileInfo, platformIds });
+  } catch (error) {
+    console.warn('Failed to initialize file progress:', error);
+  }
+}
+
+// 计算总文件大小 - 优化版本
+function calculateTotalFileSize(publishData) {
+  const files = publishData.files || [];
+  const videos = publishData.videos || [];
+
+  return [...files, ...videos].reduce((sum, file) => sum + (file.size || 0), 0);
 }
 
 
@@ -3068,6 +3135,11 @@ function updateImagePreview() {
     createImagePreviewElement,
     () => domCache.getGridContainer()
   );
+
+  // 新增：重新初始化拖拽功能（不影响原有逻辑）
+  if (window.MomentDots?.ImageDragSort) {
+    window.MomentDots.ImageDragSort.reinitialize();
+  }
 }
 
 // 控制上传提示框显示状态
@@ -7541,3 +7613,204 @@ class ArticleManager {
 
 // 创建全局文章管理器实例
 const articleManager = new ArticleManager();
+
+// ==================== 图片拖拽排序功能模块 ====================
+// 使用命名空间避免冲突，确保不影响其他功能
+window.MomentDots = window.MomentDots || {};
+window.MomentDots.ImageDragSort = (function() {
+  'use strict';
+
+  let sortableInstance = null;
+  let isEnabled = false;
+
+  /**
+   * 检查是否可以启用拖拽功能
+   */
+  function canEnableDragSort() {
+    return typeof window.Sortable !== 'undefined' &&
+           appState.imagePreviews.length > 1;
+  }
+
+  /**
+   * 初始化拖拽排序
+   */
+  function initialize() {
+    // 安全检查：确保不影响其他功能
+    if (!canEnableDragSort() || isEnabled) return;
+
+    const gridContainer = domCache.getGridContainer();
+    if (!gridContainer) return;
+
+    try {
+      sortableInstance = Sortable.create(gridContainer, {
+        // 基础配置
+        animation: 200,
+        ghostClass: 'md-sortable-ghost',
+        chosenClass: 'md-sortable-chosen',
+        dragClass: 'md-sortable-drag',
+
+        // 安全配置：只允许拖拽图片容器
+        filter: '.image-remove-btn, .upload-placeholder',
+        preventOnFilter: false,
+
+        // 限制拖拽范围：只在当前容器内
+        group: {
+          name: 'image-preview-sort',
+          pull: false,
+          put: false
+        },
+
+        // 事件处理
+        onEnd: handleDragEnd,
+        onStart: handleDragStart
+      });
+
+      isEnabled = true;
+      addDragHint();
+      console.log('✅ 图片拖拽排序已启用');
+
+    } catch (error) {
+      console.warn('拖拽功能初始化失败:', error);
+      cleanup();
+    }
+  }
+
+  /**
+   * 处理拖拽开始
+   */
+  function handleDragStart(evt) {
+    console.log('开始拖拽图片:', evt.oldIndex);
+    // 可以在这里添加拖拽开始的视觉反馈
+  }
+
+  /**
+   * 处理拖拽结束
+   */
+  function handleDragEnd(evt) {
+    const { oldIndex, newIndex } = evt;
+
+    if (oldIndex === newIndex) return;
+
+    console.log(`图片从位置 ${oldIndex} 移动到位置 ${newIndex}`);
+
+    // 安全地更新数组顺序
+    try {
+      reorderImages(oldIndex, newIndex);
+
+      // 保存状态
+      debouncedSaveToStorage();
+
+      // 同步文件管理器顺序
+      syncFileManagerOrder();
+
+      console.log('✅ 图片顺序更新完成');
+
+    } catch (error) {
+      console.error('更新图片顺序失败:', error);
+      // 发生错误时重新渲染，恢复原始状态
+      updateImagePreview();
+    }
+  }
+
+  /**
+   * 重新排序图片数组
+   */
+  function reorderImages(oldIndex, newIndex) {
+    const images = appState.imagePreviews;
+
+    // 验证索引有效性
+    if (oldIndex < 0 || oldIndex >= images.length ||
+        newIndex < 0 || newIndex >= images.length) {
+      throw new Error('Invalid index for reordering');
+    }
+
+    // 执行重排序
+    const [movedImage] = images.splice(oldIndex, 1);
+    images.splice(newIndex, 0, movedImage);
+
+    console.log('新的图片顺序:', images.map(img => img.name));
+  }
+
+  /**
+   * 同步文件管理器顺序
+   */
+  function syncFileManagerOrder() {
+    if (!mainController?.fileManager) return;
+
+    try {
+      const newFileIds = appState.imagePreviews
+        .map(img => img.fileId)
+        .filter(id => id);
+
+      if (newFileIds.length > 0) {
+        mainController.fileManager.currentFileIds = newFileIds;
+        mainController.fileManager.saveFileIds();
+        console.log('✅ 文件管理器顺序已同步');
+      }
+    } catch (error) {
+      console.warn('同步文件管理器顺序失败:', error);
+    }
+  }
+
+  /**
+   * 添加拖拽提示
+   */
+  function addDragHint() {
+    const gridContainer = domCache.getGridContainer();
+    if (!gridContainer || gridContainer.querySelector('.drag-hint')) return;
+
+    const hint = document.createElement('div');
+    hint.className = 'drag-hint';
+    hint.textContent = '拖拽图片可重新排序';
+    gridContainer.appendChild(hint);
+  }
+
+  /**
+   * 移除拖拽提示
+   */
+  function removeDragHint() {
+    const hint = domCache.getGridContainer()?.querySelector('.drag-hint');
+    if (hint) hint.remove();
+  }
+
+  /**
+   * 清理拖拽功能
+   */
+  function cleanup() {
+    if (sortableInstance) {
+      sortableInstance.destroy();
+      sortableInstance = null;
+    }
+    isEnabled = false;
+    removeDragHint();
+  }
+
+  /**
+   * 重新初始化（当图片列表更新时调用）
+   */
+  function reinitialize() {
+    cleanup();
+
+    // 延迟初始化，确保DOM已更新
+    setTimeout(() => {
+      if (canEnableDragSort()) {
+        initialize();
+      }
+    }, 100);
+  }
+
+  // 公开接口
+  return {
+    initialize: initialize,
+    cleanup: cleanup,
+    reinitialize: reinitialize,
+    isEnabled: () => isEnabled
+  };
+})();
+
+// 在页面卸载时清理拖拽功能，确保内存释放
+window.addEventListener('beforeunload', function() {
+  if (window.MomentDots?.ImageDragSort) {
+    window.MomentDots.ImageDragSort.cleanup();
+  }
+});
