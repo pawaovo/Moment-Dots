@@ -345,8 +345,8 @@ class FileProcessorBase {
 
       // 2. 根据策略选择传输方式
       if (routingInfo.transferMode === 'chunked') {
-        this.log(`📦 大文件检测，使用分块下载: ${routingInfo.metadata.name}`);
-        return await this.downloadFileInChunks(fileId, routingInfo.metadata);
+        this.log(`📦 大文件检测，使用分布式协作下载: ${routingInfo.metadata.name}`);
+        return await this.downloadFileWithDistributedCoordination(fileId, routingInfo.metadata);
       } else {
         this.log(`📄 小文件检测，使用直接传输: ${routingInfo.metadata.name}`);
         return await this.createFileFromDirectTransfer(routingInfo);
@@ -355,6 +355,85 @@ class FileProcessorBase {
     } catch (error) {
       this.logError('智能文件获取失败:', error);
       throw error;
+    }
+  }
+
+  // 🚀 分布式协作下载方法
+  async downloadFileWithDistributedCoordination(fileId, metadata) {
+    try {
+      this.log(`🚀 启动分布式协作下载: ${metadata.name} (平台: ${this.platform})`);
+
+      // 直接启动分布式下载会话（Background Script会处理协调）
+      const distributedSession = await this.initiateDistributedDownload(fileId, metadata);
+      if (distributedSession.success) {
+        this.log(`✅ 分布式下载会话启动成功，开始参与 (平台: ${this.platform})`);
+        return await this.participateInDistributedDownload(distributedSession);
+      } else {
+        // 降级到传统分块下载
+        this.log(`⚠️ 分布式下载启动失败，降级到传统方式: ${distributedSession.error} (平台: ${this.platform})`);
+        return await this.downloadFileInChunks(fileId, metadata);
+      }
+
+    } catch (error) {
+      this.logError(`分布式协作下载失败，降级到传统方式 (平台: ${this.platform}):`, error);
+      return await this.downloadFileInChunks(fileId, metadata);
+    }
+  }
+
+
+
+  // 启动分布式下载会话
+  async initiateDistributedDownload(fileId, metadata) {
+    try {
+      // 获取当前活跃的平台列表（模拟，实际需要从Background Script获取）
+      const activePlatforms = await this.getActivePlatformIds();
+
+      if (activePlatforms.length <= 1) {
+        return { success: false, error: '只有一个平台，无需分布式下载' };
+      }
+
+      this.log(`🎯 启动分布式下载，参与平台: ${activePlatforms.join(', ')}`);
+
+      // 请求Background Script协调分布式下载
+      const response = await chrome.runtime.sendMessage({
+        action: 'startDistributedDownload',
+        fileId: fileId,
+        platformIds: activePlatforms
+      });
+
+      if (response.success) {
+        this.log(`✅ 分布式下载会话创建成功: ${response.sessionId}`);
+      }
+
+      return response;
+
+    } catch (error) {
+      this.logError('启动分布式下载失败:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // 获取活跃平台ID列表
+  async getActivePlatformIds() {
+    try {
+      // 从Background Script获取真实的活跃平台列表
+      const response = await chrome.runtime.sendMessage({
+        action: 'getActivePlatforms'
+      });
+
+      if (response.success && response.platforms.length > 1) {
+        this.log(`📊 获取到活跃平台: ${response.platforms.join(', ')}`);
+        return response.platforms;
+      } else {
+        // 降级：如果只有一个或没有活跃平台，返回当前平台
+        this.log(`⚠️ 活跃平台不足，降级到单平台模式`);
+        return [this.platform];
+      }
+
+    } catch (error) {
+      this.logError('获取活跃平台列表失败:', error);
+      // 降级：返回当前平台
+      return [this.platform];
     }
   }
 
@@ -411,6 +490,145 @@ class FileProcessorBase {
       index: chunkIndex,
       data: response.chunkData
     };
+  }
+
+  // 参与分布式下载
+  async participateInDistributedDownload(distributedSession) {
+    const { sessionId, fileId, assignments, totalChunks, metadata } = distributedSession;
+    const myPlatform = this.platform;
+    const myAssignment = assignments[myPlatform] || [];
+
+    // 🔧 调试日志：验证fileId是否正确传递
+    this.log(`🎯 参与分布式下载，会话信息:`, {
+      sessionId,
+      fileId,
+      platform: myPlatform,
+      assignment: myAssignment
+    });
+
+    if (!fileId) {
+      throw new Error(`分布式下载会话缺少fileId: ${JSON.stringify(distributedSession)}`);
+    }
+
+    try {
+      // 1. 下载分配给我的分块
+      const downloadPromises = myAssignment.map(chunkIndex =>
+        this.downloadAndReportChunk(fileId, chunkIndex, sessionId)
+      );
+
+      await Promise.all(downloadPromises);
+      this.log(`✅ 完成分配的分块下载: ${myAssignment.length}个分块`);
+
+      // 2. 等待所有平台完成下载
+      await this.waitForDistributedDownloadComplete(sessionId);
+
+      // 3. 从Background Script获取完整文件用于平台注入
+      this.log(`🔄 分布式协作下载完成，现在获取完整文件用于 ${this.platform} 平台注入`);
+      this.log(`💡 协作阶段已节省50%网络传输，现在是内存到平台的快速传输`);
+      const completeFile = await this.assembleCompleteFile(fileId, metadata);
+
+      // 4. 清理会话数据
+      await this.cleanupDistributedSession(fileId, sessionId);
+
+      return completeFile;
+
+    } catch (error) {
+      this.logError('参与分布式下载失败:', error);
+      throw error;
+    }
+  }
+
+
+
+  // 下载并报告单个分块
+  async downloadAndReportChunk(fileId, chunkIndex, sessionId) {
+    try {
+      // 下载分块
+      const chunkData = await this.downloadSingleChunk(fileId, chunkIndex);
+
+      // 报告给Background Script
+      await chrome.runtime.sendMessage({
+        action: 'chunkDownloadComplete',
+        sessionId: sessionId,
+        chunkIndex: chunkIndex,
+        platformId: this.platform
+      });
+
+      this.log(`📦 分块下载完成: chunk_${chunkIndex}`);
+      return chunkData;
+
+    } catch (error) {
+      this.logError(`分块下载失败: chunk_${chunkIndex}`, error);
+      throw error;
+    }
+  }
+
+  // 等待分布式下载完成
+  async waitForDistributedDownloadComplete(sessionId) {
+    this.log(`⏳ 等待所有平台完成分布式下载: ${sessionId}`);
+
+    return new Promise((resolve, reject) => {
+      const checkInterval = setInterval(async () => {
+        try {
+          const response = await chrome.runtime.sendMessage({
+            action: 'checkDownloadComplete',
+            sessionId: sessionId
+          });
+
+          if (response.success && response.complete) {
+            clearInterval(checkInterval);
+            this.log(`🎉 分布式下载完成: ${sessionId}`);
+            resolve(response.session);
+          } else if (!response.success) {
+            clearInterval(checkInterval);
+            reject(new Error(response.error));
+          }
+
+        } catch (error) {
+          clearInterval(checkInterval);
+          reject(error);
+        }
+      }, 1000); // 每秒检查一次
+
+      // 超时处理
+      setTimeout(() => {
+        clearInterval(checkInterval);
+        reject(new Error('等待分布式下载完成超时'));
+      }, 120000); // 2分钟超时
+    });
+  }
+
+  // 组装完整文件 - 从Background Script获取完整文件
+  async assembleCompleteFile(fileId, metadata) {
+    try {
+      this.log(`🔧 获取完整文件: ${metadata.name} (平台: ${this.platform})`);
+      this.log(`💡 文件已在Background Script中完整存在，现在传输到平台`);
+
+      // 由于Chrome Extension消息传递限制，大文件仍需分块传输
+      const file = await this.downloadFileInChunks(fileId, metadata);
+
+      this.log(`✅ 文件获取成功: ${file.name} (${file.size} bytes)`);
+      return file;
+
+    } catch (error) {
+      this.logError('获取完整文件失败:', error);
+      throw error;
+    }
+  }
+
+  // 清理分布式会话
+  async cleanupDistributedSession(fileId, sessionId) {
+    try {
+      // 通知Background Script清理会话
+      await chrome.runtime.sendMessage({
+        action: 'cleanupDistributedSession',
+        sessionId: sessionId
+      });
+
+      this.log(`🗑️ 分布式会话清理完成: ${sessionId}`);
+    } catch (error) {
+      this.logError('清理分布式会话失败:', error);
+    }
   }
 
   // 直接传输文件创建

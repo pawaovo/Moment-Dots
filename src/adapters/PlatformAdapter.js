@@ -73,30 +73,38 @@ export class BasePlatformAdapter {
     let filesToUpload = [];
 
     if (fileIds && fileIds.length > 0) {
-      // 新方案：从Background Script获取文件
-      this.log('使用新的Background Script文件管理系统...');
+      // 🚀 新方案：使用智能文件获取（支持分布式下载）
+      this.log('使用智能文件获取系统（支持分布式协作下载）...');
       try {
         for (const fileId of fileIds) {
-          this.log(`请求文件: ${fileId}`);
+          this.log(`智能获取文件: ${fileId}`);
 
-          const response = await chrome.runtime.sendMessage({
-            action: 'getFile',
-            fileId: fileId
-          });
-
-          if (response.success && response.arrayData) {
-            const uint8Array = new Uint8Array(response.arrayData);
-            const blob = new Blob([uint8Array], { type: response.metadata.type });
-            const file = new File([blob], response.metadata.name, {
-              type: response.metadata.type,
-              lastModified: response.metadata.lastModified
+          // 注意：这个文件可能是旧版本，如果没有getFileWithInstantPreview方法，降级到旧API
+          let file;
+          if (typeof this.getFileWithInstantPreview === 'function') {
+            file = await this.getFileWithInstantPreview(fileId);
+          } else {
+            // 降级到旧API
+            const response = await chrome.runtime.sendMessage({
+              action: 'getFile',
+              fileId: fileId
             });
 
-            filesToUpload.push(file);
-            this.log(`成功获取文件: ${file.name} (${file.size} bytes)`);
-          } else {
-            this.log(`警告: 文件ID ${fileId} 对应的文件未找到: ${response.error || 'Unknown error'}`);
+            if (response.success && response.arrayData) {
+              const uint8Array = new Uint8Array(response.arrayData);
+              const blob = new Blob([uint8Array], { type: response.metadata.type });
+              file = new File([blob], response.metadata.name, {
+                type: response.metadata.type,
+                lastModified: response.metadata.lastModified
+              });
+            } else {
+              this.log(`警告: 文件ID ${fileId} 对应的文件未找到: ${response.error || 'Unknown error'}`);
+              continue;
+            }
           }
+
+          filesToUpload.push(file);
+          this.log(`✅ 智能获取文件成功: ${file.name} (${file.size} bytes)`);
         }
       } catch (error) {
         this.logError('从Background Script获取文件失败:', error);

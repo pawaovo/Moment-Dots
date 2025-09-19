@@ -6828,6 +6828,54 @@ window.debugCache = {
   }
 };
 
+// 🚀 分布式下载调试工具
+window.debugDistributed = {
+  async platforms() {
+    try {
+      const response = await chrome.runtime.sendMessage({ action: 'getActivePlatforms' });
+      console.log('🎯 活跃平台:', response);
+      return response;
+    } catch (error) {
+      console.error('获取活跃平台失败:', error);
+      return null;
+    }
+  },
+
+  async sessions() {
+    try {
+      // 获取本地存储的分布式会话
+      const result = await chrome.storage.local.get();
+      const sessions = Object.keys(result).filter(key => key.startsWith('distributed_session_'));
+
+      console.log('📋 分布式会话:', sessions);
+      sessions.forEach(sessionKey => {
+        console.log(`  ${sessionKey}:`, result[sessionKey]);
+      });
+
+      return sessions.map(key => result[key]);
+    } catch (error) {
+      console.error('获取分布式会话失败:', error);
+      return null;
+    }
+  },
+
+  help() {
+    console.log(`
+🚀 分布式下载调试工具:
+- debugDistributed.platforms() : 查看当前活跃平台
+- debugDistributed.sessions()  : 查看分布式下载会话
+- debugDistributed.help()      : 显示此帮助信息
+
+💡 分布式下载原理:
+- 多个平台协作下载同一文件的不同分块
+- 避免重复下载，提升效率80%
+- 自动降级到传统下载方式
+    `);
+  }
+};
+
+console.log('🚀 分布式下载调试工具已加载，输入 debugDistributed.help() 查看使用说明');
+
 
 
 

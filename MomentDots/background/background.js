@@ -67,6 +67,10 @@ class BackgroundFileService {
     this.fileMetadata = new Map(); // 存储文件元数据
     this.uploadSessions = new Map(); // 存储分块上传会话
     this.sessionId = Date.now(); // 会话ID，用于标识扩展启动会话
+
+    // 🚀 分布式下载协调器
+    this.distributedDownloader = new DistributedChunkDownloader();
+
     console.log('🧹 BackgroundFileService initialized - Session:', this.sessionId);
   }
 
@@ -407,12 +411,25 @@ class BackgroundFileService {
     try {
       const metadata = this.getFileMetadata(fileId);
 
+      // 🚀 检查是否为分布式下载完成的文件
+      if (metadata.distributedDownloadComplete) {
+        console.log(`🎯 检测到分布式下载完成的文件: ${metadata.name} - 使用优化传输`);
+        return {
+          success: true,
+          transferMode: 'chunked',
+          distributedComplete: true, // 🚀 特殊标记
+          metadata: metadata
+        };
+      }
+
       // 🚀 大文件阈值：16MB（优化后的阈值）
       const largeFileThreshold = 16 * 1024 * 1024;
 
       if (metadata.size > largeFileThreshold) {
         console.log(`📊 大文件检测: ${metadata.name} (${(metadata.size / 1024 / 1024).toFixed(1)}MB) - 使用分块传输`);
+
         return {
+          success: true,
           transferMode: 'chunked',
           metadata: metadata
         };
@@ -423,6 +440,7 @@ class BackgroundFileService {
         const arrayBuffer = await blob.arrayBuffer();
 
         return {
+          success: true,
           transferMode: 'direct',
           arrayData: Array.from(new Uint8Array(arrayBuffer)),
           metadata: metadata
@@ -430,7 +448,10 @@ class BackgroundFileService {
       }
     } catch (error) {
       console.error('Failed to get file with smart routing:', error);
-      throw error;
+      return {
+        success: false,
+        error: error.message
+      };
     }
   }
 
@@ -507,6 +528,238 @@ class BackgroundFileService {
     }
 
     return cleanedCount;
+  }
+}
+
+// 🚀 分布式分块下载协调器
+class DistributedChunkDownloader {
+  constructor() {
+    this.downloadSessions = new Map(); // 下载会话管理
+    this.activePlatforms = new Set();   // 活跃平台列表
+    console.log('🚀 DistributedChunkDownloader initialized');
+  }
+
+  // 🚀 辅助方法：获取剩余未分配的分块
+  getRemainingChunks(session) {
+    const assignedChunks = new Set();
+
+    Object.values(session.assignments).forEach(assignment => {
+      assignment.forEach(chunkIndex => assignedChunks.add(chunkIndex));
+    });
+
+    const remainingChunks = [];
+    for (let i = 0; i < session.totalChunks; i++) {
+      if (!assignedChunks.has(i)) {
+        remainingChunks.push(i);
+      }
+    }
+
+    return remainingChunks;
+  }
+
+  // 🎯 核心方法：协调分布式下载
+  async coordinateDistributedDownload(fileId, platformIds) {
+    // 🚀 关键修复：检查是否已有该文件的分布式下载会话
+    for (const [existingSessionId, session] of this.downloadSessions.entries()) {
+      if (session.fileId === fileId && session.status === 'downloading') {
+        console.log(`🔄 文件 ${fileId} 已有活跃的分布式下载会话: ${existingSessionId}`);
+        console.log(`📋 将平台 ${platformIds.join(', ')} 加入现有会话`);
+
+        // 将新平台添加到现有会话
+        const newPlatforms = platformIds.filter(platformId => !session.platformStatus.has(platformId));
+        if (newPlatforms.length > 0) {
+          const remainingChunks = this.getRemainingChunks(session);
+          if (remainingChunks.length > 0) {
+            // 平均分配剩余分块给新平台
+            const chunksPerPlatform = Math.ceil(remainingChunks.length / newPlatforms.length);
+
+            newPlatforms.forEach((platformId, index) => {
+              const startIndex = index * chunksPerPlatform;
+              const endIndex = Math.min(startIndex + chunksPerPlatform, remainingChunks.length);
+              const newAssignment = remainingChunks.slice(startIndex, endIndex);
+
+              session.assignments[platformId] = newAssignment;
+              session.platformStatus.set(platformId, {
+                assigned: newAssignment,
+                completed: [],
+                status: 'pending'
+              });
+              console.log(`📦 为平台 ${platformId} 分配分块: ${newAssignment.join(', ')}`);
+            });
+          }
+        }
+
+        return {
+          success: true,
+          sessionId: existingSessionId,
+          fileId: session.fileId,
+          assignments: session.assignments,
+          totalChunks: session.totalChunks,
+          metadata: session.metadata
+        };
+      }
+    }
+
+    const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+    try {
+      console.log(`🚀 开始分布式下载协调: ${fileId}`, { sessionId, platformIds });
+
+      // 1. 获取文件元数据
+      const metadata = backgroundFileService.getFileMetadata(fileId);
+      if (!metadata) {
+        throw new Error(`文件元数据未找到: ${fileId}`);
+      }
+
+      const chunkSize = 16 * 1024 * 1024; // 16MB
+      const totalChunks = Math.ceil(metadata.size / chunkSize);
+
+      // 2. 智能分配分块给各平台
+      const assignments = this.distributeChunks(totalChunks, platformIds);
+
+      // 3. 创建下载会话
+      const session = {
+        fileId,
+        metadata,
+        totalChunks,
+        assignments,
+        completedChunks: new Set(),
+        platformStatus: new Map(),
+        startTime: Date.now(),
+        status: 'downloading'
+      };
+
+      // 初始化平台状态
+      platformIds.forEach(platformId => {
+        session.platformStatus.set(platformId, {
+          assigned: assignments[platformId],
+          completed: [],
+          status: 'pending'
+        });
+      });
+
+      this.downloadSessions.set(sessionId, session);
+
+      console.log(`📊 分块分配完成:`, {
+        totalChunks,
+        assignments,
+        sessionId
+      });
+
+      return {
+        success: true,
+        sessionId,
+        fileId,  // 🔧 修复：包含fileId
+        assignments,
+        totalChunks,
+        metadata
+      };
+
+    } catch (error) {
+      console.error('分布式下载协调失败:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  // 智能分块分配算法
+  distributeChunks(totalChunks, platformIds) {
+    const platformCount = platformIds.length;
+    const baseChunksPerPlatform = Math.floor(totalChunks / platformCount);
+    const remainingChunks = totalChunks % platformCount;
+
+    const assignments = {};
+    let currentChunk = 0;
+
+    platformIds.forEach((platformId, index) => {
+      const chunksForThisPlatform = baseChunksPerPlatform + (index < remainingChunks ? 1 : 0);
+      assignments[platformId] = [];
+
+      for (let i = 0; i < chunksForThisPlatform; i++) {
+        assignments[platformId].push(currentChunk++);
+      }
+    });
+
+    console.log('📊 分块分配结果:', assignments);
+    return assignments;
+  }
+
+  // 记录分块下载完成
+  markChunkComplete(sessionId, chunkIndex, platformId) {
+    const session = this.downloadSessions.get(sessionId);
+    if (!session) {
+      console.error(`下载会话未找到: ${sessionId}`);
+      return false;
+    }
+
+    // 更新完成状态
+    session.completedChunks.add(chunkIndex);
+
+    const platformStatus = session.platformStatus.get(platformId);
+    if (platformStatus) {
+      platformStatus.completed.push(chunkIndex);
+
+      // 检查该平台是否完成所有分配的分块
+      if (platformStatus.completed.length === platformStatus.assigned.length) {
+        platformStatus.status = 'completed';
+        console.log(`✅ 平台 ${platformId} 完成所有分块下载`);
+      }
+    }
+
+    console.log(`📦 分块完成: ${sessionId} chunk_${chunkIndex} by ${platformId} (${session.completedChunks.size}/${session.totalChunks})`);
+
+    // 检查是否所有分块都已完成
+    if (session.completedChunks.size === session.totalChunks) {
+      session.status = 'completed';
+      console.log(`🎉 文件下载完成: ${sessionId} (${Date.now() - session.startTime}ms)`);
+
+      // 🚀 标记文件为"分布式下载完成"状态
+      this.markFileAsDistributedComplete(session.fileId, sessionId);
+
+      return { allComplete: true, session };
+    }
+
+    return { allComplete: false, session };
+  }
+
+  // 🚀 新增：标记文件为分布式下载完成并预组装
+  markFileAsDistributedComplete(fileId, sessionId) {
+    // 在文件元数据中标记为分布式下载完成
+    const metadata = backgroundFileService.getFileMetadata(fileId);
+    if (metadata) {
+      metadata.distributedDownloadComplete = true;
+      metadata.distributedSessionId = sessionId;
+
+      // 🚀 关键：文件已经在Background Script中完整存在
+      // 分布式下载过程中，各平台下载的分块已经被Background Script接收并存储
+      // 现在文件在fileStorage中是完整的，各平台可以直接获取
+      console.log(`🏷️ 文件标记为分布式下载完成: ${fileId}`);
+      console.log(`💡 文件已在Background Script中完整存在，各平台可直接获取`);
+    }
+  }
+
+  // 检查下载是否完成
+  isDownloadComplete(sessionId) {
+    const session = this.downloadSessions.get(sessionId);
+    return session && session.status === 'completed';
+  }
+
+  // 获取下载会话信息
+  getDownloadSession(sessionId) {
+    return this.downloadSessions.get(sessionId);
+  }
+
+  // 清理下载会话
+  cleanupSession(sessionId) {
+    const session = this.downloadSessions.get(sessionId);
+    if (session) {
+      this.downloadSessions.delete(sessionId);
+      console.log(`🗑️ 清理下载会话: ${sessionId}`);
+      return true;
+    }
+    return false;
   }
 }
 
@@ -668,6 +921,7 @@ class TaskScheduler {
     this.activeJobs = new Map();
     this.taskQueue = [];
     this.runningTasks = new Set(); // 修复：初始化runningTasks
+    this.activePlatformTabs = new Map(); // 🚀 新增：活跃平台标签页映射
 
     // 检查PublishManager是否可用
     if (self.publishManager) {
@@ -677,6 +931,44 @@ class TaskScheduler {
       console.warn('PublishManager not available, using fallback mode');
       this.publishManager = null;
     }
+  }
+
+  // 🚀 新增：注册活跃平台标签页
+  registerActivePlatform(platformId, tabId) {
+    this.activePlatformTabs.set(platformId, tabId);
+    console.log(`📋 注册活跃平台: ${platformId} -> Tab ${tabId}`);
+  }
+
+  // 🚀 新增：获取当前活跃的平台ID列表
+  getActivePlatformIds() {
+    const activePlatforms = Array.from(this.activePlatformTabs.keys());
+    console.log(`📊 当前活跃平台: ${activePlatforms.join(', ')}`);
+    return activePlatforms;
+  }
+
+  // 🚀 新增：清理非活跃平台
+  async cleanupInactivePlatforms() {
+    const toRemove = [];
+
+    // 使用Promise.all来并行检查所有标签页
+    const checkPromises = Array.from(this.activePlatformTabs.entries()).map(async ([platformId, tabId]) => {
+      try {
+        await chrome.tabs.get(tabId);
+        return null; // 标签页存在
+      } catch (error) {
+        return platformId; // 标签页不存在，返回platformId用于清理
+      }
+    });
+
+    const results = await Promise.all(checkPromises);
+
+    // 清理不存在的标签页对应的平台
+    results.forEach(platformId => {
+      if (platformId) {
+        this.activePlatformTabs.delete(platformId);
+        console.log(`🗑️ 清理非活跃平台: ${platformId}`);
+      }
+    });
   }
 
   async executeTasks(platforms, content) {
@@ -783,6 +1075,9 @@ class TaskScheduler {
       });
 
       console.log(`Created tab ${tab.id} for ${platform.name}, actual URL: ${tab.url}`);
+
+      // 🚀 注册活跃平台标签页
+      this.registerActivePlatform(platform.id, tab.id);
 
       // 等待页面加载
       await this.waitForTabLoad(tab.id);
@@ -1337,6 +1632,96 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       console.error('Failed to clear file cache:', error);
       sendResponse({ success: false, error: error.message });
     }
+    return true;
+  }
+
+  // 🚀 分布式下载API：启动协调下载
+  if (message.action === 'startDistributedDownload') {
+    const { fileId, platformIds } = message;
+    console.log(`🚀 [DEBUG] 启动分布式下载请求:`, { fileId, platformIds });
+
+    backgroundFileService.distributedDownloader.coordinateDistributedDownload(fileId, platformIds)
+      .then(result => {
+        console.log(`🚀 [DEBUG] 分布式下载协调结果:`, result);
+        sendResponse(result);
+      })
+      .catch(error => {
+        console.error('Failed to start distributed download:', error);
+        sendResponse({ success: false, error: error.message });
+      });
+    return true;
+  }
+
+  // 🚀 分布式下载API：分块完成通知
+  if (message.action === 'chunkDownloadComplete') {
+    try {
+      const { sessionId, chunkIndex, platformId } = message;
+      const result = backgroundFileService.distributedDownloader.markChunkComplete(sessionId, chunkIndex, platformId);
+      sendResponse({ success: true, result });
+    } catch (error) {
+      console.error('Failed to mark chunk complete:', error);
+      sendResponse({ success: false, error: error.message });
+    }
+    return true;
+  }
+
+  // 🚀 分布式下载API：检查下载状态
+  if (message.action === 'checkDownloadComplete') {
+    try {
+      const { sessionId } = message;
+      const isComplete = backgroundFileService.distributedDownloader.isDownloadComplete(sessionId);
+      const session = backgroundFileService.distributedDownloader.getDownloadSession(sessionId);
+
+      // 🔍 调试信息：仅在关键状态变化时记录
+      if (!session) {
+        console.log(`⚠️ 会话不存在: ${sessionId}`);
+      }
+
+      sendResponse({
+        success: true,
+        complete: isComplete,
+        session: session ? {
+          totalChunks: session.totalChunks,
+          completedChunks: session.completedChunks.size,
+          status: session.status
+        } : null
+      });
+    } catch (error) {
+      console.error('Failed to check download status:', error);
+      sendResponse({ success: false, error: error.message });
+    }
+    return true;
+  }
+
+  // 🚀 分布式下载API：清理会话
+  if (message.action === 'cleanupDistributedSession') {
+    try {
+      const { sessionId } = message;
+      const result = backgroundFileService.distributedDownloader.cleanupSession(sessionId);
+      sendResponse({ success: result });
+    } catch (error) {
+      console.error('Failed to cleanup distributed session:', error);
+      sendResponse({ success: false, error: error.message });
+    }
+    return true;
+  }
+
+  // 🚀 分布式下载API：获取活跃平台列表
+  if (message.action === 'getActivePlatforms') {
+    // 清理非活跃平台并返回结果
+    taskScheduler.cleanupInactivePlatforms()
+      .then(() => {
+        const activePlatforms = taskScheduler.getActivePlatformIds();
+        sendResponse({
+          success: true,
+          platforms: activePlatforms,
+          count: activePlatforms.length
+        });
+      })
+      .catch(error => {
+        console.error('Failed to get active platforms:', error);
+        sendResponse({ success: false, error: error.message });
+      });
     return true;
   }
 
