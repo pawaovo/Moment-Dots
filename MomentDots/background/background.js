@@ -66,7 +66,33 @@ class BackgroundFileService {
     this.fileStorage = new Map(); // 使用Map存储Blob对象
     this.fileMetadata = new Map(); // 存储文件元数据
     this.uploadSessions = new Map(); // 存储分块上传会话
-    console.log('BackgroundFileService initialized with chunked transfer support');
+    this.sessionId = Date.now(); // 会话ID，用于标识扩展启动会话
+    console.log('🧹 BackgroundFileService initialized - Session:', this.sessionId);
+  }
+
+  // 🧹 清理当前会话的所有缓存
+  clearCurrentSessionCache() {
+    try {
+      const beforeStats = {
+        fileStorage: this.fileStorage.size,
+        fileMetadata: this.fileMetadata.size,
+        uploadSessions: this.uploadSessions.size
+      };
+
+      // 清理内存中的文件缓存
+      this.fileStorage.clear();
+      this.fileMetadata.clear();
+      this.uploadSessions.clear();
+
+      console.log('🗑️ 文件缓存已清理');
+      console.log('📊 清理前:', beforeStats);
+      console.log('📊 清理后: 全部为0');
+
+      return true;
+    } catch (error) {
+      console.error('清理文件缓存失败:', error);
+      return false;
+    }
   }
 
   // 初始化文件上传会话
@@ -381,17 +407,17 @@ class BackgroundFileService {
     try {
       const metadata = this.getFileMetadata(fileId);
 
-      // 大文件阈值：32MB
-      const largeFileThreshold = 32 * 1024 * 1024;
+      // 🚀 大文件阈值：16MB（优化后的阈值）
+      const largeFileThreshold = 16 * 1024 * 1024;
 
       if (metadata.size > largeFileThreshold) {
-        console.log(`📊 大文件检测: ${metadata.name} (${metadata.size} bytes) - 使用分块传输`);
+        console.log(`📊 大文件检测: ${metadata.name} (${(metadata.size / 1024 / 1024).toFixed(1)}MB) - 使用分块传输`);
         return {
           transferMode: 'chunked',
           metadata: metadata
         };
       } else {
-        console.log(`📊 小文件检测: ${metadata.name} (${metadata.size} bytes) - 使用直接传输`);
+        console.log(`📊 小文件检测: ${metadata.name} (${(metadata.size / 1024 / 1024).toFixed(1)}MB) - 使用直接传输`);
         // 小文件直接传输
         const blob = this.fileStorage.get(fileId);
         const arrayBuffer = await blob.arrayBuffer();
@@ -456,9 +482,13 @@ class BackgroundFileService {
     return {
       totalFiles,
       totalSize,
+      totalSizeMB: (totalSize / 1024 / 1024).toFixed(2),
+      sessionId: this.sessionId,
       files: Array.from(this.fileMetadata.values())
     };
   }
+
+
 
   // 清理过期文件（可选）
   cleanup(maxAge = 24 * 60 * 60 * 1000) { // 默认24小时
@@ -1294,6 +1324,22 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
+  // 🧹 新增：手动清理缓存的消息处理
+  if (message.action === 'clearFileCache') {
+    try {
+      const result = backgroundFileService.clearCurrentSessionCache();
+      sendResponse({
+        success: result,
+        message: result ? '缓存清理成功' : '缓存清理失败',
+        stats: backgroundFileService.getStorageStats()
+      });
+    } catch (error) {
+      console.error('Failed to clear file cache:', error);
+      sendResponse({ success: false, error: error.message });
+    }
+    return true;
+  }
+
   if (message.action === 'getStorageStats') {
     try {
       checkServiceStatus(); // 添加状态检查
@@ -1830,6 +1876,8 @@ function validatePlatformConfig() {
 // Service Worker 启动时恢复状态
 chrome.runtime.onStartup.addListener(async () => {
   try {
+    console.log('🚀 Service Worker 启动，开始状态恢复...');
+
     const result = await chrome.storage.local.get(['publishStatus', 'publishResults']);
     if (result.publishStatus) {
       publishState.isPublishing = result.publishStatus.isPublishing || false;
@@ -1837,9 +1885,9 @@ chrome.runtime.onStartup.addListener(async () => {
     if (result.publishResults) {
       publishState.publishResults = result.publishResults;
     }
-    console.log('Background state restored:', publishState);
+    console.log('✅ Background state restored:', publishState);
   } catch (error) {
-    console.error('Failed to restore state:', error);
+    console.error('❌ Failed to restore state:', error);
   }
 });
 

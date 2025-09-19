@@ -787,7 +787,12 @@ class MainPageController {
           });
 
           if (testResponse && testResponse.success) {
-            console.log('Background Script connection successful');
+            console.log('✅ Background Script connection successful');
+            console.log('📊 文件缓存状态:', {
+              totalFiles: testResponse.totalFiles,
+              totalSizeMB: testResponse.totalSizeMB,
+              sessionId: testResponse.sessionId
+            });
             this.useChunkedTransfer = true;
             break;
           }
@@ -1210,6 +1215,8 @@ class MainPageController {
       await this.fileManager.cleanup();
     }
   }
+
+
 }
 
 // 创建全局控制器实例
@@ -6795,6 +6802,31 @@ window.addEventListener('beforeunload', async () => {
     }
   }
 });
+
+// 🧹 简化的调试工具
+window.debugCache = {
+  async stats() {
+    try {
+      const response = await chrome.runtime.sendMessage({ action: 'getStorageStats' });
+      console.table(response);
+      return response;
+    } catch (error) {
+      console.error('获取缓存状态失败:', error);
+      return null;
+    }
+  },
+
+  async clear() {
+    try {
+      const response = await chrome.runtime.sendMessage({ action: 'clearFileCache' });
+      console.log('🗑️ 缓存清理完成:', response);
+      return response;
+    } catch (error) {
+      console.error('清理缓存失败:', error);
+      return null;
+    }
+  }
+};
 
 
 
