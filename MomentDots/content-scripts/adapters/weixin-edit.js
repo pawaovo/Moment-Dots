@@ -121,6 +121,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           console.log('✅ 页面关键元素已就绪，跳过等待');
         }
 
+        // 🎯 获取预处理后的标题和概要数据
+        const currentPlatform = message.data.platforms?.find(p => p.id === 'weixin');
+        const titleToInject = currentPlatform?.processedTitle || title;
+        const summaryToInject = currentPlatform?.processedSummary || message.data.summary;
+
+        console.log('📝 微信公众号内容注入开始', {
+          contentType: message.data.contentType,
+          originalTitle: title?.length || 0,
+          processedTitle: titleToInject?.length || 0,
+          titleLimit: currentPlatform?.limits?.title,
+          titleTruncated: title && titleToInject && title.length > titleToInject.length
+        });
+
         // 记录注入结果
         const injectionResults = {
           title: false,
@@ -130,9 +143,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         };
 
         // 注入标题（必需步骤）
-        if (title) {
+        if (titleToInject) {
           try {
-            await injectTitle(title);
+            await injectTitle(titleToInject);
             injectionResults.title = true;
             infoLog('✅ 标题注入成功');
           } catch (error) {

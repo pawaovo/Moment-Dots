@@ -358,16 +358,24 @@ class WeixinChannelsPlatformAdapter extends FileProcessorBase {
   }
 
   /**
-   * 🚀 标题注入方法 - 优化版本
+   * 🚀 标题注入方法 - 优化版本（支持预处理数据）
    */
-  async injectTitle(title) {
+  async injectTitle(title, isPreProcessed = false) {
     if (!title?.trim()) {
       this.log('标题为空，跳过注入');
       return true;
     }
 
-    // 使用统一的内容截断方法
-    const truncatedTitle = this._truncateContent(title, this.config.limits.maxTitleLength, '标题');
+    // 🎯 如果已经是预处理的数据，直接使用；否则使用本地截断逻辑作为备用
+    const finalTitle = isPreProcessed ?
+      title :
+      this._truncateContent(title, this.config.limits.maxTitleLength, '标题');
+
+    this.log(`📝 标题处理: ${isPreProcessed ? '使用预处理数据' : '使用本地截断'}`, {
+      originalLength: title.length,
+      finalLength: finalTitle.length,
+      isPreProcessed
+    });
 
     const titleInput = this.findTitleInput();
     if (!titleInput) {
@@ -375,8 +383,8 @@ class WeixinChannelsPlatformAdapter extends FileProcessorBase {
     }
 
     // 使用统一的内容注入方法
-    this._injectToElement(titleInput, truncatedTitle);
-    this.log(`✅ 标题注入成功: ${truncatedTitle}`);
+    this._injectToElement(titleInput, finalTitle);
+    this.log(`✅ 标题注入成功: ${finalTitle}`);
     return true;
   }
 
@@ -408,13 +416,14 @@ class WeixinChannelsPlatformAdapter extends FileProcessorBase {
 
   /**
    * 🚀 统一的内容截断方法 - 避免重复代码
+   * 注意：此方法仅作为备用，优先使用主应用层的预处理数据
    * @param {string} content - 原始内容
    * @param {number} maxLength - 最大长度
    * @param {string} type - 内容类型（用于日志）
    * @returns {string} 截断后的内容
    */
   _truncateContent(content, maxLength, type) {
-    if (content.length <= maxLength) {
+    if (!content || !maxLength || content.length <= maxLength) {
       return content;
     }
 
@@ -659,9 +668,22 @@ class WeixinChannelsPlatformAdapter extends FileProcessorBase {
         throw new Error('图文发布流程只能在图文发布页面执行');
       }
 
+      // 🎯 获取预处理后的标题和概要数据
+      const currentPlatform = data.platforms?.find(p => p.id === 'weixinchannels');
+      const titleToInject = currentPlatform?.processedTitle || data.title;
+      const summaryToInject = currentPlatform?.processedSummary || data.summary;
+
+      this.log('📝 微信视频号图文内容处理', {
+        contentType: data.contentType,
+        originalTitle: data.title?.length || 0,
+        processedTitle: titleToInject?.length || 0,
+        titleLimit: currentPlatform?.limits?.title,
+        titleTruncated: data.title && titleToInject && data.title.length > titleToInject.length
+      });
+
       // 使用原有的发布流程，增强错误处理
       const publishSteps = [
-        { condition: data.title, action: () => this.injectTitle(data.title), name: '标题注入' },
+        { condition: titleToInject, action: () => this.injectTitle(titleToInject, !!currentPlatform?.processedTitle), name: '标题注入' },
         { condition: data.fileIds?.length || data.files?.length, action: () => this.uploadFiles(data), name: '文件上传' },
         { condition: data.content, action: () => this.injectContent(data.content), name: '内容注入' }
       ];

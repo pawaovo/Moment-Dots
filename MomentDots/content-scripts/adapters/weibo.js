@@ -1351,7 +1351,22 @@ class WeiboAdapter extends FileProcessorBase {
    * 微博头条文章发布流程（基于Playwright MCP测试验证）
    */
   async publishArticleContent(data) {
-    this.log('📝 开始微博头条文章发布流程...');
+    // 🎯 获取预处理后的标题和概要数据
+    const currentPlatform = data.platforms?.find(p => p.id === 'weibo-article');
+    const titleToInject = currentPlatform?.processedTitle || data.title;
+    const summaryToInject = currentPlatform?.processedSummary || data.summary;
+
+    this.log('📝 开始微博头条文章发布流程...', {
+      contentType: data.contentType,
+      originalTitle: data.title?.length || 0,
+      processedTitle: titleToInject?.length || 0,
+      titleLimit: currentPlatform?.limits?.title,
+      titleTruncated: data.title && titleToInject && data.title.length > titleToInject.length,
+      originalSummary: data.summary?.length || 0,
+      processedSummary: summaryToInject?.length || 0,
+      summaryLimit: currentPlatform?.limits?.excerpt,
+      summaryTruncated: data.summary && summaryToInject && data.summary.length > summaryToInject.length
+    });
 
     try {
       // 1. 验证当前确实在微博头条编辑页面
@@ -1362,21 +1377,21 @@ class WeiboAdapter extends FileProcessorBase {
       }
 
       // 2. 注入标题
-      if (data.title && data.title.trim()) {
-        await this.injectArticleTitle(data.title);
+      if (titleToInject && titleToInject.trim()) {
+        await this.injectArticleTitle(titleToInject);
       }
 
       // 3. 注入导语（如果提供）- 添加详细调试
       this.log('🔍 检查导语数据:', {
-        hasSummary: !!data.summary,
-        summaryValue: data.summary,
-        summaryType: typeof data.summary,
-        summaryLength: data.summary ? data.summary.length : 0,
-        summaryTrimmed: data.summary ? data.summary.trim() : '',
+        hasSummary: !!summaryToInject,
+        summaryValue: summaryToInject,
+        summaryType: typeof summaryToInject,
+        summaryLength: summaryToInject ? summaryToInject.length : 0,
+        summaryTrimmed: summaryToInject ? summaryToInject.trim() : '',
         allDataKeys: Object.keys(data)
       });
 
-      if (data.summary && data.summary.trim()) {
+      if (summaryToInject && summaryToInject.trim()) {
         this.log('📝 开始注入导语...');
         await this.injectArticleSummary(data.summary);
       } else {

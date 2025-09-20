@@ -1045,12 +1045,23 @@ class DouyinAdapter extends DouyinDependencyManager.getBasePlatformAdapter() {
   async injectVideoContentInEditPage(data) {
     const { title, content } = data;
 
+    // 🎯 获取预处理后的标题和概要数据（短视频模式）
+    const currentPlatform = data.platforms?.find(p => p.id === 'douyin');
+    const titleToInject = currentPlatform?.processedTitle || title;
+    const summaryToInject = currentPlatform?.processedSummary || data.summary;
+
     try {
-      this.log('开始在视频编辑页面注入内容');
+      this.log('开始在视频编辑页面注入内容', {
+        contentType: data.contentType,
+        originalTitle: title?.length || 0,
+        processedTitle: titleToInject?.length || 0,
+        titleLimit: currentPlatform?.limits?.title,
+        titleTruncated: title && titleToInject && title.length > titleToInject.length
+      });
 
       // 注入标题
-      if (title) {
-        await this.injectVideoTitle(title);
+      if (titleToInject) {
+        await this.injectVideoTitle(titleToInject);
       }
 
       // 注入描述内容
@@ -1697,7 +1708,20 @@ class DouyinAdapter extends DouyinDependencyManager.getBasePlatformAdapter() {
   async injectContentInEditPage(data) {
     const { title, content } = data;
 
-    this.log('开始编辑页面内容注入', { hasTitle: !!title, hasContent: !!content });
+    // 🎯 获取预处理后的标题和概要数据
+    const currentPlatform = data.platforms?.find(p => p.id === 'douyin');
+    const titleToInject = currentPlatform?.processedTitle || title;
+    const summaryToInject = currentPlatform?.processedSummary || data.summary;
+
+    this.log('开始编辑页面内容注入', {
+      hasTitle: !!title,
+      hasContent: !!content,
+      contentType: data.contentType,
+      originalTitle: title?.length || 0,
+      processedTitle: titleToInject?.length || 0,
+      titleLimit: currentPlatform?.limits?.title,
+      titleTruncated: title && titleToInject && title.length > titleToInject.length
+    });
 
     // 快速验证页面准备状态
     await this.ensureEditPageReady();
@@ -1706,9 +1730,9 @@ class DouyinAdapter extends DouyinDependencyManager.getBasePlatformAdapter() {
     const injectionTasks = [];
 
     // 注入标题
-    if (title) {
+    if (titleToInject) {
       injectionTasks.push(
-        this.injectTitle(title).then(success => {
+        this.injectTitle(titleToInject).then(success => {
           if (!success) {
             throw new Error('标题注入失败');
           }

@@ -302,12 +302,23 @@ class BilibiliAdapter extends MutationObserverBase {
    * 注入内容 - Bilibili特定实现
    */
   async injectContent(data) {
-    console.log('📝 开始注入Bilibili内容...', data);
+    // 🎯 获取预处理后的标题和概要数据
+    const currentPlatform = data.platforms?.find(p => p.id === 'bilibili');
+    const titleToInject = currentPlatform?.processedTitle || data.title;
+    const summaryToInject = currentPlatform?.processedSummary || data.summary;
+
+    console.log('📝 开始注入Bilibili内容...', {
+      contentType: data.contentType,
+      originalTitle: data.title?.length || 0,
+      processedTitle: titleToInject?.length || 0,
+      titleLimit: currentPlatform?.limits?.title,
+      titleTruncated: data.title && titleToInject && data.title.length > titleToInject.length
+    });
 
     try {
       // 注入标题（如果提供）
-      if (data.title && data.title.trim()) {
-        await this.injectTitle(data.title);
+      if (titleToInject && titleToInject.trim()) {
+        await this.injectTitle(titleToInject);
       }
 
       // 注入正文内容
@@ -812,7 +823,18 @@ class BilibiliAdapter extends MutationObserverBase {
    * 专栏文章发布流程（基于Playwright MCP测试验证）
    */
   async publishArticleContent(data) {
-    console.log('📝 开始Bilibili专栏文章发布流程...');
+    // 🎯 获取预处理后的标题和概要数据
+    const currentPlatform = data.platforms?.find(p => p.id === 'bilibili-article');
+    const titleToInject = currentPlatform?.processedTitle || data.title;
+    const summaryToInject = currentPlatform?.processedSummary || data.summary;
+
+    console.log('📝 开始Bilibili专栏文章发布流程...', {
+      contentType: data.contentType,
+      originalTitle: data.title?.length || 0,
+      processedTitle: titleToInject?.length || 0,
+      titleLimit: currentPlatform?.limits?.title,
+      titleTruncated: data.title && titleToInject && data.title.length > titleToInject.length
+    });
 
     try {
       // 1. 验证当前确实在专栏编辑页面
@@ -821,8 +843,8 @@ class BilibiliAdapter extends MutationObserverBase {
       }
 
       // 2. 注入标题
-      if (data.title && data.title.trim()) {
-        await this.injectArticleTitle(data.title);
+      if (titleToInject && titleToInject.trim()) {
+        await this.injectArticleTitle(titleToInject);
       }
 
       // 3. 处理富文本内容和图片
@@ -1074,14 +1096,24 @@ class BilibiliAdapter extends MutationObserverBase {
    * 注入视频内容（标题和简介）- 基于Playwright MCP测试验证
    */
   async injectVideoContent(data) {
+    // 🎯 获取预处理后的标题和概要数据（短视频模式）
+    const currentPlatform = data.platforms?.find(p => p.id === 'bilibili');
+    const titleToInject = currentPlatform?.processedTitle || data.title;
+    const summaryToInject = currentPlatform?.processedSummary || data.summary;
+
     console.log('📝 开始注入视频内容...', {
+      contentType: data.contentType,
       hasTitle: !!data.title,
-      hasContent: !!data.content
+      hasContent: !!data.content,
+      originalTitle: data.title?.length || 0,
+      processedTitle: titleToInject?.length || 0,
+      titleLimit: currentPlatform?.limits?.title,
+      titleTruncated: data.title && titleToInject && data.title.length > titleToInject.length
     });
 
     // 1. 处理视频标题
-    if (data.title) {
-      await this.injectVideoTitle(data.title);
+    if (titleToInject) {
+      await this.injectVideoTitle(titleToInject);
     }
 
     // 2. 处理视频简介

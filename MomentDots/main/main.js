@@ -104,32 +104,32 @@ const LIMITS_DISPLAY_CONFIG = {
   HEADER_SEPARATOR: '   '
 };
 
-// 平台字数限制配置
+// 平台字数限制配置（基于用户提供的准确清单）
 const PLATFORM_LIMITS_CONFIG = {
   // 动态页面字数限制（标题|内容）
   dynamic: {
-    weibo: { title: null, content: 5000 },
-    xiaohongshu: { title: 20, content: 1000 },
-    jike: { title: null, content: 5000 },
-    douyin: { title: 20, content: 1000 },
-    x: { title: null, content: 140 },
-    bilibili: { title: 20, content: 1000 },
-    weixin: { title: 64, content: 1000 },
-    weixinchannels: { title: 22, content: 1000 }
+    weibo: { title: null, content: 5000 },        // 微博：无标题限制
+    xiaohongshu: { title: 20, content: 1000 },    // 小红书：标题20字符
+    jike: { title: null, content: 5000 },         // 即刻：无标题限制
+    douyin: { title: 20, content: 1000 },         // 抖音：标题20字符
+    x: { title: null, content: 140 },             // X：无标题限制
+    bilibili: { title: 20, content: 1000 },       // Bilibili：标题20字符
+    weixin: { title: 64, content: 1000 },         // 微信公众号：标题64字符
+    weixinchannels: { title: 22, content: 1000 }  // 微信视频号：标题22字符
   },
   // 文章页面字数限制（标题|概要|内容）
   article: {
-    'weibo-article': { title: 32, excerpt: 44, content: 50000 },
-    'bilibili-article': { title: 40, excerpt: null, content: 50000 },
-    'weixin-article': { title: 64, excerpt: 120, content: 50000 }
+    'weibo-article': { title: 32, excerpt: 44, content: 50000 },    // 微博头条：标题32，概要44
+    'bilibili-article': { title: 40, excerpt: null, content: 50000 }, // Bilibili专栏：标题40，无概要
+    'weixin-article': { title: 64, excerpt: null, content: 50000 }   // 微信公众号文章：标题64，无概要
   },
   // 短视频页面字数限制（标题|内容）
   video: {
-    weibo: { title: 30, content: 1000 },
-    xiaohongshu: { title: 20, content: 1000 },
-    douyin: { title: 30, content: 1000 },
-    bilibili: { title: 80, content: 2000 },
-    weixinchannels: { title: 16, content: 1000 }
+    weibo: { title: 30, content: 1000 },          // 微博：标题30字符
+    xiaohongshu: { title: 20, content: 1000 },    // 小红书：标题20字符
+    douyin: { title: 30, content: 1000 },         // 抖音：标题30字符
+    bilibili: { title: 80, content: 2000 },       // Bilibili：标题80字符
+    weixinchannels: { title: 16, content: 1000 }  // 微信视频号：标题16字符
   }
 };
 
@@ -2767,9 +2767,10 @@ async function createPublishDataFromValidated(validatedContent, useFileIds = fal
  */
 async function buildPublishDataStructure(title, content, useFileIds = false, platformsToUse = null) {
   const platforms = platformsToUse || appState.selectedPlatforms;
+  const currentContentType = appState.currentContentType;
 
   console.log('📝 发布数据创建完成', {
-    contentType: appState.currentContentType,
+    contentType: currentContentType,
     titleLength: title.length,
     contentLength: content.length,
     platformCount: platforms.length
@@ -2777,33 +2778,56 @@ async function buildPublishDataStructure(title, content, useFileIds = false, pla
 
   // 添加URL路由调试日志
   console.log('🔗 平台URL路由调试:', {
-    contentType: appState.currentContentType,
+    contentType: currentContentType,
     platforms: platforms.map(p => ({
       name: p.name,
       originalUrl: p.publishUrl,
-      routedUrl: getPlatformPublishUrl(p, appState.currentContentType)
+      routedUrl: getPlatformPublishUrl(p, currentContentType)
     }))
   });
 
-  // 根据内容类型更新平台的发布URL
-  const platformsWithCorrectUrls = platforms.map(platform => ({
-    ...platform,
-    publishUrl: getPlatformPublishUrl(platform, appState.currentContentType)
-  }));
+  // 🎯 新增：为每个平台预处理标题和概要（基于页面类型）
+  const processedPlatforms = platforms.map(platform => {
+    // 根据当前页面类型获取该平台的字数限制
+    const limits = getPlatformLimits(platform.id, currentContentType);
+
+    // 获取概要数据
+    const summaryData = appState.articleData?.excerpt || '';
+
+    // 只截断标题和概要，不处理内容
+    const processedTitle = truncateText(title, limits.title, '标题');
+    const processedSummary = truncateText(summaryData, limits.excerpt, '概要');
+
+    // 简化调试日志，避免与适配器日志重复
+    if (title && limits.title && title.length > limits.title) {
+      console.log(`📝 ${platform.name}标题截断: ${title.length} -> ${processedTitle.length} 字符`);
+    }
+    if (summaryData && limits.excerpt && summaryData.length > limits.excerpt) {
+      console.log(`📝 ${platform.name}概要截断: ${summaryData.length} -> ${processedSummary.length} 字符`);
+    }
+
+    return {
+      ...platform,
+      publishUrl: getPlatformPublishUrl(platform, currentContentType),
+      processedTitle,    // 基于当前页面类型截断的标题
+      processedSummary,  // 基于当前页面类型截断的概要
+      limits            // 保存限制信息供调试使用
+    };
+  });
 
   // 根据内容类型确定要传递的文件数据
   let images = [];
   let videos = [];
   let allFiles = [];
 
-  if (appState.currentContentType === '短视频') {
+  if (currentContentType === '短视频') {
     // 短视频模式：使用短视频数据
     videos = [...(appState.shortVideoPreviews || [])];
     images = [...(appState.shortVideoCovers || [])];
     allFiles = [...videos, ...images];
 
     console.log('📁 短视频文件数据收集:', {
-      shortVideoPreviews: appState.shortVideoPreviews?.length || 0,
+      shortVideePreviews: appState.shortVideoPreviews?.length || 0,
       shortVideoCovers: appState.shortVideoCovers?.length || 0,
       totalVideos: videos.length,
       totalImages: images.length,
@@ -2831,8 +2855,8 @@ async function buildPublishDataStructure(title, content, useFileIds = false, pla
     title: title,
     content: content,
     summary: summaryData, // 添加导语/概要字段
-    contentType: appState.currentContentType, // 添加内容类型字段
-    platforms: platformsWithCorrectUrls,
+    contentType: currentContentType, // 添加内容类型字段
+    platforms: processedPlatforms, // 🎯 使用包含截断数据的平台列表
     images: images,
     videos: videos,
     files: allFiles
@@ -2843,7 +2867,7 @@ async function buildPublishDataStructure(title, content, useFileIds = false, pla
     let imageFileIds = [];
     let videoFileIds = [];
 
-    if (appState.currentContentType === '短视频') {
+    if (currentContentType === '短视频') {
       // 短视频模式：从短视频数据中提取文件ID
       videoFileIds = extractFileIds(appState.shortVideoPreviews);
       imageFileIds = extractFileIds(appState.shortVideoCovers);
@@ -2872,6 +2896,23 @@ async function buildPublishDataStructure(title, content, useFileIds = false, pla
     totalFiles: baseData.files.length
   });
   return baseData;
+}
+
+/**
+ * 统一的文字截断函数
+ * @param {string} text - 原始文字
+ * @param {number} maxLength - 最大长度限制
+ * @param {string} type - 内容类型（用于日志）
+ * @returns {string} 截断后的文字
+ */
+function truncateText(text, maxLength, type = '文字') {
+  if (!text || !maxLength || text.length <= maxLength) {
+    return text;
+  }
+
+  const truncated = text.substring(0, maxLength);
+  console.log(`📝 ${type}截断: ${text.length} -> ${truncated.length} 字符`);
+  return truncated;
 }
 
 // 获取需要内容优化的平台列表

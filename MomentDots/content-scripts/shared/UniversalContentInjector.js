@@ -365,12 +365,15 @@
 
     /**
      * 内容验证和清理
+     * @deprecated 此方法已被主应用层的文本截断系统替代，仅保留用于向后兼容
      * @param {string} content - 原始内容
      * @param {string} platform - 平台名称
      * @returns {string} - 清理后的内容
      */
     validateAndCleanContent(content, platform) {
-      // 平台特定的内容限制
+      console.warn('⚠️ validateAndCleanContent方法已废弃，建议使用主应用层的预处理文本截断系统');
+
+      // 平台特定的内容限制（保留用于向后兼容）
       const limits = {
         jike: { maxLength: 500, allowHTML: false },
         weibo: { maxLength: 140, allowHTML: false },

@@ -1925,7 +1925,19 @@ class XiaohongshuAdapter extends XiaohongshuDependencyManager.getFileProcessorBa
   async injectContentInEditPage(data) {
     const { title, content } = data;
 
-    this.log('开始编辑页面内容注入', { hasTitle: !!title, hasContent: !!content });
+    // 🎯 获取预处理后的标题和概要数据
+    const currentPlatform = data.platforms?.find(p => p.id === 'xiaohongshu');
+    const titleToInject = currentPlatform?.processedTitle || title;
+    const summaryToInject = currentPlatform?.processedSummary || data.summary;
+
+    this.log('开始编辑页面内容注入', {
+      hasTitle: !!title,
+      hasContent: !!content,
+      originalTitle: title?.length || 0,
+      processedTitle: titleToInject?.length || 0,
+      titleLimit: currentPlatform?.limits?.title,
+      titleTruncated: title && titleToInject && title.length > titleToInject.length
+    });
 
     // 快速验证页面准备状态
     await this.ensureEditPageReady();
@@ -1933,8 +1945,8 @@ class XiaohongshuAdapter extends XiaohongshuDependencyManager.getFileProcessorBa
     // 并行准备标题和内容注入器（提高效率）
     const injectionTasks = [];
 
-    if (title) {
-      injectionTasks.push(this.injectTitle(title));
+    if (titleToInject) {
+      injectionTasks.push(this.injectTitle(titleToInject));
     }
 
     if (content) {
@@ -2467,24 +2479,33 @@ class XiaohongshuAdapter extends XiaohongshuDependencyManager.getFileProcessorBa
    * @param {Object} data - 发布数据
    */
   async injectVideoContentInEditPage(data) {
-    this.log('📝 开始在视频编辑页面注入内容...');
+    // 🎯 获取预处理后的标题和概要数据（短视频模式）
+    const currentPlatform = data.platforms?.find(p => p.id === 'xiaohongshu');
+    const titleToInject = currentPlatform?.processedTitle || data.title;
+    const summaryToInject = currentPlatform?.processedSummary || data.summary;
+
+    this.log('📝 开始在视频编辑页面注入内容...', {
+      contentType: data.contentType,
+      originalTitle: data.title?.length || 0,
+      processedTitle: titleToInject?.length || 0,
+      titleLimit: currentPlatform?.limits?.title,
+      titleTruncated: data.title && titleToInject && data.title.length > titleToInject.length
+    });
 
     try {
-      const { title, content } = data;
-
       // 1. 注入标题
-      if (title) {
+      if (titleToInject) {
         this.log('📝 注入视频标题...');
-        const titleSuccess = await this.injectVideoTitle(title);
+        const titleSuccess = await this.injectVideoTitle(titleToInject);
         if (!titleSuccess) {
           this.log('⚠️ 视频标题注入失败，但继续执行');
         }
       }
 
       // 2. 注入内容
-      if (content) {
+      if (data.content) {
         this.log('📝 注入视频描述内容...');
-        const contentSuccess = await this.injectVideoContent(content);
+        const contentSuccess = await this.injectVideoContent(data.content);
         if (!contentSuccess) {
           this.log('⚠️ 视频内容注入失败，但继续执行');
         }
