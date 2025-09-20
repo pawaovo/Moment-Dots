@@ -133,6 +133,77 @@ const PLATFORM_LIMITS_CONFIG = {
   }
 };
 
+// 动态页面平台媒体支持信息配置
+const PLATFORM_MEDIA_SUPPORT_CONFIG = {
+  weibo: '（图片+视频 18）',
+  xiaohongshu: '（图片 18）',
+  douyin: '（图片 35）',
+  jike: '（图片/视频 9）',
+  bilibili: '（图片 9）',
+  weixinchannels: '（图片 18）',
+  weixin: '（图片 20）',
+  x: '（图片+视频 4）'
+};
+
+// 统一的文件数量限制检查工具
+class FileCountLimitChecker {
+  /**
+   * 获取当前总文件数
+   * @returns {number} 总文件数
+   */
+  static getTotalFileCount() {
+    return appState.imagePreviews.length + appState.videoPreviews.length;
+  }
+
+  /**
+   * 检查文件数量限制
+   * @param {string} fileType - 文件类型 ('image' 或 'video')
+   * @returns {Object} 检查结果 {canUpload: boolean, remainingSlots: number, errorType?: string}
+   */
+  static checkFileCountLimit(fileType = 'image') {
+    if (appState.currentContentType === '动态') {
+      // 动态页面：检查总文件数限制
+      const totalFiles = this.getTotalFileCount();
+      const remainingSlots = IMAGE_CONFIG.maxImages - totalFiles;
+
+      if (remainingSlots <= 0) {
+        return {
+          canUpload: false,
+          remainingSlots: 0,
+          errorType: '文件',
+          maxLimit: IMAGE_CONFIG.maxImages
+        };
+      }
+
+      return {
+        canUpload: true,
+        remainingSlots: remainingSlots,
+        errorType: '文件',
+        maxLimit: IMAGE_CONFIG.maxImages
+      };
+    } else {
+      // 其他页面：分别检查图片和视频数量限制
+      if (fileType === 'video') {
+        const remainingSlots = VIDEO_CONFIG.maxVideos - appState.videoPreviews.length;
+        return {
+          canUpload: remainingSlots > 0,
+          remainingSlots: Math.max(0, remainingSlots),
+          errorType: '视频',
+          maxLimit: VIDEO_CONFIG.maxVideos
+        };
+      } else {
+        const remainingSlots = IMAGE_CONFIG.maxImages - appState.imagePreviews.length;
+        return {
+          canUpload: remainingSlots > 0,
+          remainingSlots: Math.max(0, remainingSlots),
+          errorType: '图片',
+          maxLimit: IMAGE_CONFIG.maxImages
+        };
+      }
+    }
+  }
+}
+
 // 提示词选择器配置常量
 const PROMPT_SELECTOR_CONFIG = {
   DELAYS: {
@@ -913,17 +984,17 @@ class MainPageController {
       // 确保服务已初始化
       await this.ensureInitialized();
 
-      // 检查图片数量限制（累积计算）
-      const remainingSlots = IMAGE_CONFIG.maxImages - appState.imagePreviews.length;
-      if (remainingSlots <= 0) {
-        FileErrorHandler.handleCountLimitError(IMAGE_CONFIG.maxImages, '图片');
+      // 使用统一的文件数量限制检查
+      const limitCheck = FileCountLimitChecker.checkFileCountLimit('image');
+      if (!limitCheck.canUpload) {
+        FileErrorHandler.handleCountLimitError(limitCheck.maxLimit, limitCheck.errorType);
         return;
       }
 
       // 限制处理的文件数量
-      const filesToProcess = Array.from(files).slice(0, remainingSlots);
+      const filesToProcess = Array.from(files).slice(0, limitCheck.remainingSlots);
       if (filesToProcess.length < files.length) {
-        showNotification(`只能再上传 ${remainingSlots} 张图片，已自动选择前 ${filesToProcess.length} 张`, 'warning');
+        showNotification(`只能再上传 ${limitCheck.remainingSlots} 个${limitCheck.errorType}，已自动选择前 ${filesToProcess.length} 个`, 'warning');
       }
 
       // 显示加载状态
@@ -1287,7 +1358,7 @@ let mainController = null;
 
 // 图片上传配置
 const IMAGE_CONFIG = {
-  maxImages: 32,
+  maxImages: 35,  // 动态页面最大文件数量限制修改为35
   // 移除文件大小限制，允许上传任意大小的图片
   allowedTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
 };
@@ -1827,15 +1898,15 @@ class ImageUploadHandler {
 
     this.inputElement = event.target;
 
-    // 检查是否超过最大图片数量
-    const remainingSlots = IMAGE_CONFIG.maxImages - appState.imagePreviews.length;
-    if (remainingSlots <= 0) {
-      FileErrorHandler.handleCountLimitError(IMAGE_CONFIG.maxImages, '图片');
+    // 使用统一的文件数量限制检查
+    const limitCheck = FileCountLimitChecker.checkFileCountLimit('image');
+    if (!limitCheck.canUpload) {
+      FileErrorHandler.handleCountLimitError(limitCheck.maxLimit, limitCheck.errorType);
       return;
     }
 
     // 处理选中的文件
-    const filesToProcess = Array.from(files).slice(0, remainingSlots);
+    const filesToProcess = Array.from(files).slice(0, limitCheck.remainingSlots);
     this.totalFiles = filesToProcess.length;
     this.processedCount = 0;
 
@@ -1930,15 +2001,15 @@ class VideoUploadHandler {
 
     this.inputElement = event.target;
 
-    // 检查是否超过最大视频数量
-    const remainingSlots = VIDEO_CONFIG.maxVideos - appState.videoPreviews.length;
-    if (remainingSlots <= 0) {
-      FileErrorHandler.handleCountLimitError(VIDEO_CONFIG.maxVideos, '视频');
+    // 使用统一的文件数量限制检查
+    const limitCheck = FileCountLimitChecker.checkFileCountLimit('video');
+    if (!limitCheck.canUpload) {
+      FileErrorHandler.handleCountLimitError(limitCheck.maxLimit, limitCheck.errorType);
       return;
     }
 
     // 处理选中的文件
-    const filesToProcess = Array.from(files).slice(0, remainingSlots);
+    const filesToProcess = Array.from(files).slice(0, limitCheck.remainingSlots);
     this.totalFiles = filesToProcess.length;
     this.processedCount = 0;
 
@@ -3730,17 +3801,24 @@ function removeVideo(videoId) {
 function updateMediaCount() {
   const imageCount = appState.imagePreviews.length;
   const videoCount = appState.videoPreviews.length;
-  const totalCount = imageCount + videoCount;
+  const totalCount = FileCountLimitChecker.getTotalFileCount(); // 使用统一的计算方法
 
   if (domCache.imageCountDisplay) {
     if (totalCount > 0) {
       let countText = '';
-      if (imageCount > 0 && videoCount > 0) {
-        countText = `图片 ${imageCount}/${IMAGE_CONFIG.maxImages}    视频 ${videoCount}/${VIDEO_CONFIG.maxVideos}`;
-      } else if (imageCount > 0) {
-        countText = `图片 ${imageCount}/${IMAGE_CONFIG.maxImages}`;
-      } else if (videoCount > 0) {
-        countText = `视频 ${videoCount}/${VIDEO_CONFIG.maxVideos}`;
+
+      // 动态页面：显示统一的文件计数格式（移除"图片"/"视频"文字）
+      if (appState.currentContentType === '动态') {
+        countText = `${totalCount}/${IMAGE_CONFIG.maxImages}`;
+      } else {
+        // 其他页面类型：保持原有的分类显示格式
+        if (imageCount > 0 && videoCount > 0) {
+          countText = `图片 ${imageCount}/${IMAGE_CONFIG.maxImages}    视频 ${videoCount}/${VIDEO_CONFIG.maxVideos}`;
+        } else if (imageCount > 0) {
+          countText = `图片 ${imageCount}/${IMAGE_CONFIG.maxImages}`;
+        } else if (videoCount > 0) {
+          countText = `视频 ${videoCount}/${VIDEO_CONFIG.maxVideos}`;
+        }
       }
 
       domCache.imageCountDisplay.textContent = countText;
@@ -6420,6 +6498,10 @@ function renderPlatformList() {
             <div class="flex items-center">
               ${generatePlatformLogoHTML(platform)}
               <span class="text-sm font-medium text-gray-900">${platform.name}</span>
+              ${appState.currentContentType === '动态' && PLATFORM_MEDIA_SUPPORT_CONFIG[platform.id] ?
+                `<span class="text-xs text-gray-500 ml-1">${PLATFORM_MEDIA_SUPPORT_CONFIG[platform.id]}</span>` :
+                ''
+              }
             </div>
             <!-- 字数限制显示 -->
             <div class="text-xs text-gray-500 font-mono mr-2">
