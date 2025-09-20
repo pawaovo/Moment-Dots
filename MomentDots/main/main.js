@@ -83,6 +83,56 @@ const PROMPT_LABEL_TEXTS = {
   TOOLTIP_SELECTED: '上次使用: {promptName}，点击重新选择'
 };
 
+// 字数统计配置常量
+const CHARACTER_COUNT_CONFIG = {
+  // 使用与页面一致的防抖延迟配置
+  SELECTORS: {
+    // 输入框选择器映射 - 映射到对应的标签元素或容器
+    'title-input': 'title-input',
+    'article-title-input': 'article-title-input',
+    'article-excerpt-input': 'article-excerpt-input',
+    'content-textarea': 'content-textarea',
+    'article-rich-editor': 'article-rich-editor'
+  },
+  STYLE_CLASSES: 'text-gray-400 text-sm font-medium' // 默认灰色，蓝色通过动态切换
+};
+
+// 平台字数限制显示常量
+const LIMITS_DISPLAY_CONFIG = {
+  SEPARATOR: ' | ',
+  PLACEHOLDER: '-',
+  HEADER_SEPARATOR: '   '
+};
+
+// 平台字数限制配置
+const PLATFORM_LIMITS_CONFIG = {
+  // 动态页面字数限制（标题|内容）
+  dynamic: {
+    weibo: { title: null, content: 5000 },
+    xiaohongshu: { title: 20, content: 1000 },
+    jike: { title: null, content: 5000 },
+    douyin: { title: 20, content: 1000 },
+    x: { title: null, content: 140 },
+    bilibili: { title: 20, content: 1000 },
+    weixin: { title: 64, content: 1000 },
+    weixinchannels: { title: 22, content: 1000 }
+  },
+  // 文章页面字数限制（标题|概要|内容）
+  article: {
+    'weibo-article': { title: 32, excerpt: 44, content: 50000 },
+    'bilibili-article': { title: 40, excerpt: null, content: 50000 },
+    'weixin-article': { title: 64, excerpt: 120, content: 50000 }
+  },
+  // 短视频页面字数限制（标题|内容）
+  video: {
+    weibo: { title: 30, content: 1000 },
+    xiaohongshu: { title: 20, content: 1000 },
+    douyin: { title: 30, content: 1000 },
+    bilibili: { title: 80, content: 2000 },
+    weixinchannels: { title: 16, content: 1000 }
+  }
+};
+
 // 提示词选择器配置常量
 const PROMPT_SELECTOR_CONFIG = {
   DELAYS: {
@@ -3074,6 +3124,288 @@ function updateContentTypeButtons(updateSections = false) {
   }
 }
 
+// 字数统计管理器
+class CharacterCountManager {
+  constructor() {
+    this.counters = new Map(); // 存储每个输入框的计数器元素
+    this.debounceTimers = new Map(); // 存储防抖定时器
+    this.initialized = false;
+  }
+
+  /**
+   * 初始化字数统计功能
+   */
+  initialize() {
+    if (this.initialized) return;
+
+    // 为所有配置的输入框添加字数统计
+    Object.keys(CHARACTER_COUNT_CONFIG.SELECTORS).forEach(inputId => {
+      this.setupCharacterCount(inputId);
+    });
+
+    this.initialized = true;
+    console.log('字数统计管理器初始化完成');
+  }
+
+  /**
+   * 为指定输入框设置字数统计
+   * @param {string} inputId - 输入框ID
+   */
+  setupCharacterCount(inputId) {
+    const inputElement = document.getElementById(inputId);
+    if (!inputElement) return;
+
+    // 创建字数显示元素
+    const countElement = this.createCountElement(inputId);
+    if (!countElement) return;
+
+    // 存储计数器元素
+    this.counters.set(inputId, countElement);
+
+    // 绑定事件监听器
+    this.bindEvents(inputElement, inputId);
+
+    // 初始化字数显示（根据输入框类型获取内容）
+    const initialContent = inputId === 'article-rich-editor'
+      ? (inputElement.innerHTML || '')
+      : (inputElement.value || '');
+    this.updateCount(inputId, initialContent);
+  }
+
+  /**
+   * 创建字数显示元素
+   * @param {string} inputId - 输入框ID
+   * @returns {HTMLElement|null} 创建的字数显示元素
+   */
+  createCountElement(inputId) {
+    const labelElement = this.findLabelElement(inputId);
+    if (!labelElement) return null;
+
+    // 检查是否已存在字数显示元素
+    const existingCount = labelElement.querySelector('.character-count');
+    if (existingCount) return existingCount;
+
+    // 创建字数显示元素
+    const countElement = document.createElement('span');
+    countElement.className = `character-count ${CHARACTER_COUNT_CONFIG.STYLE_CLASSES}`;
+    countElement.style.float = 'right';
+    countElement.textContent = '0';
+
+    // 添加到标签元素
+    labelElement.appendChild(countElement);
+
+    return countElement;
+  }
+
+  /**
+   * 查找输入框对应的标签元素
+   * @param {string} inputId - 输入框ID
+   * @returns {HTMLElement|null} 标签元素
+   */
+  findLabelElement(inputId) {
+    // 首先尝试通过for属性查找label
+    let labelElement = document.querySelector(`label[for="${inputId}"]`);
+
+    if (labelElement) return labelElement;
+
+    // 特殊处理：文章概要输入框 - 在父容器中添加字数显示
+    if (inputId === 'article-excerpt-input') {
+      const inputElement = document.getElementById(inputId);
+      if (!inputElement) return null;
+
+      const parentDiv = inputElement.parentElement;
+      if (parentDiv) {
+        // 检查是否已经有字数显示容器
+        let countContainer = parentDiv.querySelector('.excerpt-count-container');
+        if (!countContainer) {
+          // 创建字数显示容器，不添加额外的"概要"文字
+          countContainer = document.createElement('div');
+          countContainer.className = 'excerpt-count-container flex justify-end mb-2';
+          parentDiv.insertBefore(countContainer, inputElement);
+        }
+        return countContainer;
+      }
+    }
+
+    // 特殊处理：富文本编辑器 - 查找其对应的label
+    if (inputId === 'article-rich-editor') {
+      // 富文本编辑器有对应的label，直接查找
+      labelElement = document.querySelector('label[for="article-rich-editor"]');
+      return labelElement;
+    }
+
+    return null;
+  }
+
+  /**
+   * 绑定事件监听器
+   * @param {HTMLElement} inputElement - 输入框元素
+   * @param {string} inputId - 输入框ID
+   */
+  bindEvents(inputElement, inputId) {
+    const updateHandler = () => {
+      // 富文本编辑器使用innerHTML，普通输入框使用value
+      const content = inputId === 'article-rich-editor'
+        ? (inputElement.innerHTML || '')
+        : (inputElement.value || '');
+      this.debouncedUpdate(inputId, content);
+    };
+
+    // 绑定多种事件以确保实时更新
+    ['input', 'paste', 'cut', 'keyup', 'change'].forEach(eventType => {
+      inputElement.addEventListener(eventType, updateHandler);
+    });
+  }
+
+  /**
+   * 防抖更新字数
+   * @param {string} inputId - 输入框ID
+   * @param {string} text - 文本内容
+   */
+  debouncedUpdate(inputId, text) {
+    // 清除之前的定时器
+    if (this.debounceTimers.has(inputId)) {
+      clearTimeout(this.debounceTimers.get(inputId));
+    }
+
+    // 设置新的定时器
+    const timer = setTimeout(() => {
+      this.updateCount(inputId, text);
+      this.debounceTimers.delete(inputId);
+    }, CONFIG.DEBOUNCE_DELAY);
+
+    this.debounceTimers.set(inputId, timer);
+  }
+
+  /**
+   * 更新字数显示
+   * @param {string} inputId - 输入框ID
+   * @param {string} text - 文本内容
+   */
+  updateCount(inputId, text) {
+    const countElement = this.counters.get(inputId);
+    if (!countElement) return;
+
+    const count = this.calculateCharacterCount(text, inputId);
+    countElement.textContent = count.toString();
+
+    // 根据字数动态切换颜色（使用classList更高效）
+    if (count > 0) {
+      // 有内容时显示蓝色
+      countElement.classList.remove('text-gray-400');
+      countElement.classList.add('text-blue-600');
+    } else {
+      // 无内容时显示灰色
+      countElement.classList.remove('text-blue-600');
+      countElement.classList.add('text-gray-400');
+    }
+  }
+
+  /**
+   * 计算字符数（排除纯空格和换行符）
+   * @param {string} text - 文本内容
+   * @param {string} inputId - 输入框ID，用于特殊处理
+   * @returns {number} 字符数
+   */
+  calculateCharacterCount(text, inputId = '') {
+    if (!text) return 0;
+
+    // 特殊处理：富文本编辑器需要提取纯文本
+    if (inputId === 'article-rich-editor') {
+      // 创建临时DOM元素来提取纯文本
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = text;
+      const plainText = tempDiv.textContent || tempDiv.innerText || '';
+      return plainText.replace(/^\s+|\s+$/g, '').length;
+    }
+
+    // 普通文本输入框：移除纯空格和换行符，但保留其他字符
+    return text.replace(/^\s+|\s+$/g, '').length;
+  }
+
+  /**
+   * 重新初始化（页面切换时调用）
+   */
+  reinitialize() {
+    this.cleanup();
+    this.initialized = false;
+
+    // 延迟初始化，确保DOM已更新
+    setTimeout(() => {
+      this.initialize();
+    }, 100);
+  }
+
+  /**
+   * 清理资源
+   */
+  cleanup() {
+    // 清除所有防抖定时器
+    this.debounceTimers.forEach(timer => clearTimeout(timer));
+    this.debounceTimers.clear();
+
+    // 清除计数器元素引用（DOM元素会在页面切换时自动清理）
+    this.counters.clear();
+  }
+}
+
+// 创建全局字数统计管理器实例
+const characterCountManager = new CharacterCountManager();
+
+/**
+ * 获取平台字数限制
+ * @param {string} platformId - 平台ID
+ * @param {string} contentType - 内容类型 ('动态', '文章', '短视频')
+ * @returns {Object} 字数限制对象
+ */
+function getPlatformLimits(platformId, contentType) {
+  if (contentType === '短视频') {
+    return PLATFORM_LIMITS_CONFIG.video[platformId] || {};
+  } else if (contentType === '文章') {
+    return PLATFORM_LIMITS_CONFIG.article[platformId] || {};
+  } else {
+    return PLATFORM_LIMITS_CONFIG.dynamic[platformId] || {};
+  }
+}
+
+/**
+ * 格式化平台字数限制显示
+ * @param {Object} limits - 字数限制对象
+ * @param {string} contentType - 内容类型
+ * @returns {string} 格式化的字数限制字符串
+ */
+function formatPlatformLimits(limits, contentType) {
+  const { SEPARATOR, PLACEHOLDER } = LIMITS_DISPLAY_CONFIG;
+  const formatLimit = (value) => value === null || value === undefined ? PLACEHOLDER : value.toString();
+
+  if (!limits || Object.keys(limits).length === 0) {
+    return contentType === '文章'
+      ? [PLACEHOLDER, PLACEHOLDER, PLACEHOLDER].join(SEPARATOR)
+      : [PLACEHOLDER, PLACEHOLDER].join(SEPARATOR);
+  }
+
+  if (contentType === '文章') {
+    return [formatLimit(limits.title), formatLimit(limits.excerpt), formatLimit(limits.content)].join(SEPARATOR);
+  } else {
+    return [formatLimit(limits.title), formatLimit(limits.content)].join(SEPARATOR);
+  }
+}
+
+/**
+ * 获取字数限制标题行
+ * @param {string} contentType - 内容类型
+ * @returns {string} 标题行文本
+ */
+function getLimitsHeaderText(contentType) {
+  const { HEADER_SEPARATOR } = LIMITS_DISPLAY_CONFIG;
+
+  if (contentType === '文章') {
+    return ['标题', '概要', '内容'].join(HEADER_SEPARATOR);
+  } else {
+    return ['标题', '内容'].join(HEADER_SEPARATOR);
+  }
+}
+
 // 更新标题标签文本根据内容类型
 function updateTitleLabelText(contentType) {
   const titleLabelText = document.getElementById('title-label-text');
@@ -5669,6 +6001,9 @@ function handleContentTypeSwitch(contentType, clickedButton) {
 
   // 立即保存状态到存储，确保刷新后状态一致
   saveToStorageData();
+
+  // 重新初始化字数统计功能
+  characterCountManager.reinitialize();
 }
 
 // 统一的页面区域管理函数
@@ -6052,8 +6387,26 @@ function renderPlatformList() {
     platformsToShow = SUPPORTED_PLATFORMS;
   }
 
+  // 生成字数限制标题行
+  const limitsHeaderHTML = `
+    <div class="flex items-center space-x-3 mb-1">
+      <!-- 左侧占位区域，对应平台选择区域 -->
+      <div class="flex-1 flex justify-end pr-4">
+        <div class="text-xs text-gray-500 font-mono mr-2">
+          ${getLimitsHeaderText(appState.currentContentType)}
+        </div>
+      </div>
+      <!-- 右侧占位区域，对应提示词选择器区域 -->
+      <div style="width: 70px;"></div>
+    </div>
+  `;
+
   // 生成平台列表HTML
-  const platformListHTML = platformsToShow.map(platform => `
+  const platformListHTML = platformsToShow.map(platform => {
+    const limits = getPlatformLimits(platform.id, appState.currentContentType);
+    const limitsText = formatPlatformLimits(limits, appState.currentContentType);
+
+    return `
     <div class="flex items-center space-x-3">
       <!-- 平台选择区域 -->
       <div class="flex-1 flex items-center p-4 border border-gray-200 rounded-lg hover:border-blue-300 transition-colors cursor-pointer platform-item" data-platform-id="${platform.id}">
@@ -6063,9 +6416,15 @@ function renderPlatformList() {
           class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
         />
         <div class="ml-4 flex-1">
-          <div class="flex items-center">
-            ${generatePlatformLogoHTML(platform)}
-            <span class="text-sm font-medium text-gray-900">${platform.name}</span>
+          <div class="flex items-center justify-between">
+            <div class="flex items-center">
+              ${generatePlatformLogoHTML(platform)}
+              <span class="text-sm font-medium text-gray-900">${platform.name}</span>
+            </div>
+            <!-- 字数限制显示 -->
+            <div class="text-xs text-gray-500 font-mono mr-2">
+              ${limitsText}
+            </div>
           </div>
         </div>
       </div>
@@ -6087,10 +6446,11 @@ function renderPlatformList() {
         </div>
       </div>
     </div>
-  `).join('');
+  `;
+  }).join('');
 
-  // 更新平台列表容器
-  platformListContainer.innerHTML = platformListHTML;
+  // 更新平台列表容器（包含标题行和平台列表）
+  platformListContainer.innerHTML = limitsHeaderHTML + platformListHTML;
 
   // 重新绑定事件监听器
   rebindPlatformEvents(platformsToShow);
@@ -6840,6 +7200,9 @@ async function initializePage() {
   // 初始化文章管理器
   ArticleManagerInitializer.initialize();
 
+  // 初始化字数统计功能
+  characterCountManager.initialize();
+
   console.log('Main page initialized successfully');
 
 
@@ -7196,6 +7559,8 @@ class ArticleManager {
     const { titleInput } = this.getArticleElements();
     if (titleInput && article.title) {
       titleInput.value = article.title;
+      // 触发字数统计更新
+      characterCountManager.updateCount('article-title-input', article.title);
     }
   }
 
@@ -7206,6 +7571,8 @@ class ArticleManager {
     const { excerptInput } = this.getArticleElements();
     if (excerptInput && article.excerpt) {
       excerptInput.value = article.excerpt;
+      // 触发字数统计更新
+      characterCountManager.updateCount('article-excerpt-input', article.excerpt);
     }
   }
 
@@ -7224,6 +7591,8 @@ class ArticleManager {
 
     // 直接显示富文本内容
     richEditor.innerHTML = article.content;
+    // 触发字数统计更新
+    characterCountManager.updateCount('article-rich-editor', article.content);
     // 处理懒加载图片，确保图片能够正常显示
     FormatConverter.processLazyImages(richEditor);
   }
