@@ -70,6 +70,12 @@ const CONFIG = {
   NOTIFICATION_HIDE_DELAY: 300 // 通知隐藏延迟时间（毫秒）
 };
 
+// 标题标签文本常量
+const TITLE_LABEL_TEXTS = {
+  DEFAULT: '标题 <span class="text-gray-400">（小红书、抖音、Bilibili、微信公众号、微信视频号）</span>',
+  SHORT_VIDEO: '标题 <span class="text-gray-400">（全部平台）</span>'
+};
+
 // 提示词选择器配置常量
 const PROMPT_SELECTOR_CONFIG = {
   DELAYS: {
@@ -3056,7 +3062,20 @@ function updateContentTypeButtons(updateSections = false) {
   // 只在明确需要时更新页面区域
   if (updateSections) {
     updatePageSections(appState.currentContentType);
+    // 更新标题标签文本
+    updateTitleLabelText(appState.currentContentType);
   }
+}
+
+// 更新标题标签文本根据内容类型
+function updateTitleLabelText(contentType) {
+  const titleLabelText = document.getElementById('title-label-text');
+  if (!titleLabelText) return;
+
+  // 只有短视频模式需要特殊处理，其他情况都使用默认文本
+  titleLabelText.innerHTML = contentType === '短视频'
+    ? TITLE_LABEL_TEXTS.SHORT_VIDEO
+    : TITLE_LABEL_TEXTS.DEFAULT;
 }
 
 // 全局统一DOM缓存实例
@@ -4232,7 +4251,7 @@ function createPageContent() {
               <!-- Title Input -->
               <div id="title-input-section">
                 <label for="title-input" class="block text-sm font-medium text-gray-700 mb-2">
-                  标题 <span class="text-gray-400">(可选)</span>
+                  <span id="title-label-text">标题 <span class="text-gray-400">（小红书、抖音、Bilibili、微信公众号、微信视频号）</span></span>
                 </label>
                 <input
                   id="title-input"
@@ -4246,7 +4265,7 @@ function createPageContent() {
               <!-- 文章抓取区域 (仅在文章模式下显示) -->
               <div id="article-extraction-section" class="article-extraction-section-clean" style="display: none;">
                 <label class="block text-sm font-medium text-gray-700 mb-2">
-                  链接
+                  链接<span class="text-gray-400">（通过网页链接获取文章内容）</span>
                 </label>
                 <div class="flex space-x-3 mb-4">
                   <input
@@ -4268,7 +4287,7 @@ function createPageContent() {
                 <!-- 文章标题输入框 -->
                 <div class="mb-4">
                   <label for="article-title-input" class="block text-sm font-medium text-gray-700 mb-2">
-                    标题及概要
+                    标题及概要<span class="text-gray-400">（微博头条、微信公众号文章）</span>
                   </label>
                   <input
                     id="article-title-input"
