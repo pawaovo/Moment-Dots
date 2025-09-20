@@ -80,6 +80,30 @@ const DOMCache = {
     return this.get('fileInputs', () =>
       document.querySelectorAll('input[type="file"]')
     );
+  },
+
+  // 获取概要输入框（摘要输入框）
+  getSummaryInput() {
+    return this.get('summaryInput', () => {
+      const selectors = [
+        'textarea#js_description',
+        'textarea[name="digest"]',
+        'textarea[placeholder*="摘要"]',
+        'textarea[placeholder*="选填，不填写则默认抓取正文开头部分文字"]',
+        'textarea.js_desc',
+        'textarea[max-length="120"]'
+      ];
+
+      for (const selector of selectors) {
+        try {
+          const element = document.querySelector(selector);
+          if (element) return element;
+        } catch (e) {
+          // 忽略选择器错误
+        }
+      }
+      return null;
+    });
   }
 };
 
@@ -137,6 +161,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         // 记录注入结果
         const injectionResults = {
           title: false,
+          summary: false,
           content: false,
           files: false,
           warnings: []
@@ -151,6 +176,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           } catch (error) {
             console.error('❌ 标题注入失败:', error);
             injectionResults.warnings.push(`标题注入失败: ${error.message}`);
+          }
+        }
+
+        // 注入概要（可选步骤）
+        if (summaryToInject) {
+          try {
+            await injectSummary(summaryToInject);
+            injectionResults.summary = true;
+            infoLog('✅ 概要注入成功');
+          } catch (error) {
+            console.warn('⚠️ 概要注入失败，但不影响整体流程:', error);
+            injectionResults.warnings.push(`概要注入失败: ${error.message}`);
           }
         }
 
@@ -183,7 +220,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           injectionResults.warnings.push('检测到旧版本files参数，请使用fileIds');
         }
 
-        // 判断整体成功状态（只要标题或内容任一成功即可）
+        // 判断整体成功状态（只要标题或内容任一成功即可，概要为可选）
         const isOverallSuccess = injectionResults.title || injectionResults.content;
 
         if (isOverallSuccess) {
@@ -211,33 +248,107 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 /**
- * 注入标题（优化版本，使用缓存）
+ * 通用文本输入框注入函数（优化版本，消除重复代码）
+ */
+async function injectToTextInput(element, value, fieldName) {
+  if (!element) {
+    const error = `未找到${fieldName}输入框`;
+    console.warn(`⚠️ ${error}`);
+    throw new Error(error);
+  }
+
+  console.log(`开始注入${fieldName}:`, value.substring(0, 50));
+
+  // 聚焦输入框
+  element.focus();
+
+  // 清空现有内容
+  element.value = '';
+
+  // 注入内容
+  element.value = value;
+
+  // 触发相关事件
+  element.dispatchEvent(new Event('input', { bubbles: true }));
+  element.dispatchEvent(new Event('change', { bubbles: true }));
+
+  console.log(`✅ ${fieldName}注入成功`);
+}
+
+/**
+ * 注入标题
  */
 async function injectTitle(title) {
-  console.log('开始注入标题:', title);
-
   const titleInput = DOMCache.getTitleInput();
+  await injectToTextInput(titleInput, title, '标题');
+}
 
-  if (titleInput) {
-    console.log('找到标题输入框（使用缓存）');
+/**
+ * 注入概要（摘要）
+ */
+async function injectSummary(summary) {
+  const summaryInput = DOMCache.getSummaryInput();
+  await injectToTextInput(summaryInput, summary, '概要');
+}
 
-    // 聚焦输入框
-    titleInput.focus();
+/**
+ * 查找正文编辑器（避免描述区域编辑器）
+ */
+function findContentEditor(proseMirrorEditors) {
+  // 策略1：查找不包含"填写描述信息"的编辑器（正文编辑器）
+  for (const editor of proseMirrorEditors) {
+    const editorText = editor.textContent || '';
+    const isDescriptionEditor = editorText.includes('填写描述信息') ||
+                               editorText.includes('让大家了解更多内容') ||
+                               editor.parentElement?.classList.contains('share-text__input');
 
-    // 清空现有内容
-    titleInput.value = '';
-
-    // 注入标题
-    titleInput.value = title;
-
-    // 触发相关事件
-    titleInput.dispatchEvent(new Event('input', { bubbles: true }));
-    titleInput.dispatchEvent(new Event('change', { bubbles: true }));
-
-    console.log('✅ 标题注入成功:', title);
-  } else {
-    console.warn('⚠️ 未找到标题输入框');
+    if (!isDescriptionEditor) {
+      console.log('找到正文编辑器（策略1）');
+      return editor;
+    }
   }
+
+  // 策略2：如果没找到，使用最后一个编辑器（通常是正文编辑器）
+  if (proseMirrorEditors.length > 1) {
+    console.log('使用最后一个编辑器作为正文编辑器（策略2）');
+    return proseMirrorEditors[proseMirrorEditors.length - 1];
+  }
+
+  // 策略3：如果只有一个编辑器，检查是否是正文编辑器
+  if (proseMirrorEditors.length === 1) {
+    const editor = proseMirrorEditors[0];
+    const editorText = editor.textContent || '';
+    if (!editorText.includes('填写描述信息')) {
+      console.log('使用唯一的编辑器作为正文编辑器（策略3）');
+      return editor;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * 处理内容格式，避免多余空行
+ */
+function processContentForWeixin(content) {
+  let processedContent = content.trim(); // 移除开头和结尾的空白
+
+  // 如果内容包含HTML标签，清理空段落
+  if (processedContent.includes('<p>') || processedContent.includes('<div>')) {
+    // 清理可能的多余空行
+    processedContent = processedContent.replace(/^\s*<p>\s*<\/p>\s*/g, ''); // 移除开头的空段落
+    processedContent = processedContent.replace(/\s*<p>\s*<\/p>\s*$/g, ''); // 移除结尾的空段落
+    return processedContent;
+  }
+
+  // 纯文本内容，转换为HTML格式
+  const lines = processedContent.split('\n')
+    .map(line => line.trim())
+    .filter(line => line !== ''); // 过滤空行
+
+  return lines.length > 0
+    ? lines.map(line => `<p>${line}</p>`).join('')
+    : `<p>${processedContent}</p>`;
 }
 
 /**
@@ -255,33 +366,13 @@ async function injectContentToProseMirror(content) {
       throw new Error('未找到ProseMirror编辑器');
     }
 
-    // 基于Playwright MCP测试结果：使用第一个ProseMirror编辑器（描述区域编辑器）
-    // 这是微信公众号的正文编辑区域，显示"填写描述信息，让大家了解更多内容"
-    let targetEditor = proseMirrorEditors[0];
-
-    // 验证是否是正确的编辑器
-    const editorParent = targetEditor.parentElement;
-    const isDescriptionEditor = editorParent && (
-      editorParent.classList.contains('share-text__input') ||
-      editorParent.classList.contains('js_pmEditorArea') ||
-      targetEditor.textContent.includes('填写描述信息')
-    );
-
-    if (!isDescriptionEditor && proseMirrorEditors.length > 1) {
-      // 如果第一个不是描述编辑器，查找包含描述信息的编辑器
-      for (const editor of proseMirrorEditors) {
-        if (editor.textContent.includes('填写描述信息') ||
-            editor.parentElement?.classList.contains('share-text__input')) {
-          targetEditor = editor;
-          break;
-        }
-      }
+    // 查找正文编辑器
+    const targetEditor = findContentEditor(proseMirrorEditors);
+    if (!targetEditor) {
+      throw new Error('未找到合适的正文编辑器');
     }
 
-    console.log('目标编辑器:', targetEditor);
-    console.log('编辑器类名:', targetEditor.className);
-    console.log('编辑器当前内容:', targetEditor.textContent.substring(0, 50));
-    console.log('编辑器父容器类名:', targetEditor.parentElement?.className);
+    console.log('目标编辑器类名:', targetEditor.className);
 
     // 激活编辑器
     targetEditor.click();
@@ -293,14 +384,12 @@ async function injectContentToProseMirror(content) {
     // 清空现有内容（包括placeholder）
     targetEditor.innerHTML = '';
 
-    // 将内容转换为微信支持的HTML格式
-    const lines = content.split('\n').filter(line => line.trim() !== '');
-    const htmlContent = lines.map(line => `<p>${line.trim()}</p>`).join('');
-
-    console.log('准备注入的HTML内容:', htmlContent.substring(0, 100));
+    // 处理内容格式，避免多余空行
+    const processedContent = processContentForWeixin(content);
+    console.log('准备注入的HTML内容:', processedContent.substring(0, 100));
 
     // 注入内容
-    targetEditor.innerHTML = htmlContent;
+    targetEditor.innerHTML = processedContent;
 
     // 触发相关事件让微信编辑器识别内容变化
     const events = ['input', 'change', 'keyup', 'DOMNodeInserted'];
@@ -316,7 +405,7 @@ async function injectContentToProseMirror(content) {
       throw new Error('内容注入后为空');
     }
 
-    console.log('✅ 内容注入成功到描述区域编辑器');
+    console.log('✅ 内容注入成功到正文编辑器');
     return true;
 
   } catch (error) {
