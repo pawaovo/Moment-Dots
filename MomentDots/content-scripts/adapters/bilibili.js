@@ -338,23 +338,20 @@ class BilibiliAdapter extends MutationObserverBase {
    * 注入标题内容
    */
   async injectTitle(title) {
-    console.log('📝 注入Bilibili标题:', title);
-
     try {
       const titleInput = await this.waitForElementSmart(this.selectors.titleInput, 3000, true, 'Bilibili标题输入框');
-      
+
       // 清空现有内容
       titleInput.value = '';
       titleInput.focus();
-      
+
       // 设置标题内容
       titleInput.value = title.substring(0, 20); // 限制20字符
-      
+
       // 触发输入事件
       titleInput.dispatchEvent(new Event('input', { bubbles: true }));
       titleInput.dispatchEvent(new Event('change', { bubbles: true }));
-      
-      console.log('✅ Bilibili标题注入成功');
+
       await this.delay(this.config.delays.FAST_CHECK);
     } catch (error) {
       console.error('❌ Bilibili标题注入失败:', error);
@@ -1279,8 +1276,7 @@ class BilibiliAdapter extends MutationObserverBase {
       // 移除不支持的外层容器（如 div.page, div.content 等）
       this.unwrapContainerDivs(tempDiv);
 
-      // 处理图片
-      await this.processImagesInContent(tempDiv, data);
+      // 图片处理已集成到preprocessContentForQuill方法中
 
       // 清理元素属性和规范化结构（使用统一方法）
       this.cleanElementAttributes(tempDiv);
@@ -1451,6 +1447,66 @@ class BilibiliAdapter extends MutationObserverBase {
     }
   }
 
+  /**
+   * 预处理内容以确保Quill兼容性（修复缺失方法）
+   * 基于2025年Quill.js最佳实践和Bilibili编辑器特性
+   */
+  preprocessContentForQuill(content) {
+    try {
+      // 创建临时容器来处理HTML内容
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = content;
+
+      // 1. 处理图片元素，确保与Bilibili Quill编辑器兼容
+      const images = tempDiv.querySelectorAll('img');
+      images.forEach(img => {
+        // 保持base64图片原样，这是Bilibili支持的格式
+        if (img.src && img.src.startsWith('data:image/')) {
+          // 清理可能干扰Quill的属性
+          img.removeAttribute('style');
+          img.removeAttribute('class');
+          img.removeAttribute('width');
+          img.removeAttribute('height');
+          // 保留必要的属性
+          if (!img.alt) {
+            img.alt = '图片';
+          }
+        }
+      });
+
+      // 2. 清理可能干扰Quill的HTML属性和样式
+      const allElements = tempDiv.querySelectorAll('*');
+      allElements.forEach(element => {
+        // 移除可能导致Quill解析问题的属性
+        element.removeAttribute('data-src');
+        element.removeAttribute('data-original');
+        element.removeAttribute('loading');
+
+        // 清理内联样式，保留基本格式
+        if (element.style) {
+          const allowedStyles = ['font-weight', 'font-style', 'text-decoration', 'color'];
+          const currentStyles = {};
+          allowedStyles.forEach(style => {
+            if (element.style[style]) {
+              currentStyles[style] = element.style[style];
+            }
+          });
+          element.removeAttribute('style');
+          Object.keys(currentStyles).forEach(style => {
+            element.style[style] = currentStyles[style];
+          });
+        }
+      });
+
+      return tempDiv.innerHTML;
+
+    } catch (error) {
+      console.error('❌ 内容预处理失败:', error);
+      // 返回原始内容作为备用
+      return content;
+    }
+  }
+
 
 
   /**
@@ -1497,17 +1553,33 @@ class BilibiliAdapter extends MutationObserverBase {
   }
 
   /**
-   * 注入预处理后的内容
+   * 注入预处理后的内容（优化图片处理）
    */
   async injectProcessedContent(editor, processedContent) {
-    console.log('📝 注入预处理后的内容...');
-
     try {
-      // 清空编辑器并准备注入
+      // 获取Quill实例
+      const quillContainer = editor.closest('.ql-container');
+      const quill = quillContainer?.__quill;
+
+      if (quill) {
+        // 方案1：使用Bilibili自定义的insertImages方法处理图片
+        if (typeof quill.insertImages === 'function') {
+          return await this.injectContentWithBilibiliAPI(quill, processedContent);
+        }
+
+        // 方案2：使用标准Quill clipboard模块
+        const clipboard = quill.getModule('clipboard');
+        if (clipboard) {
+          return await this.injectContentWithClipboard(quill, clipboard, processedContent);
+        }
+
+        // 方案3：使用Quill insertEmbed API逐个处理图片
+        return await this.injectContentWithInsertEmbed(quill, processedContent);
+      }
+
+      // 备用方案：直接设置innerHTML
       editor.innerHTML = '';
       editor.classList.remove('ql-blank');
-
-      // 直接设置innerHTML（因为内容已经预处理过）
       editor.innerHTML = processedContent;
 
       // 等待DOM更新
@@ -1520,11 +1592,129 @@ class BilibiliAdapter extends MutationObserverBase {
       const hasContent = editor.textContent.trim().length > 0;
       const notBlank = !editor.classList.contains('ql-blank');
 
-      console.log('📝 预处理内容注入结果:', { hasContent, notBlank });
       return hasContent && notBlank;
 
     } catch (error) {
       console.error('预处理内容注入失败:', error);
+      return false;
+    }
+  }
+
+  /**
+   * 使用Bilibili自定义API注入内容
+   */
+  async injectContentWithBilibiliAPI(quill, content) {
+    try {
+      // 解析内容中的图片
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = content;
+      const images = tempDiv.querySelectorAll('img');
+
+      if (images.length > 0) {
+        // 先插入文本内容（移除图片）
+        images.forEach(img => img.remove());
+        const textContent = tempDiv.innerHTML;
+
+        if (textContent.trim()) {
+          quill.clipboard.dangerouslyPasteHTML(textContent);
+        }
+
+        // 逐个插入图片
+        for (let i = 0; i < images.length; i++) {
+          const img = images[i];
+          if (img.src && img.src.startsWith('data:image/')) {
+            try {
+              // 使用Bilibili的insertImages方法
+              await quill.insertImages([{
+                src: img.src,
+                alt: img.alt || '图片'
+              }]);
+
+              await this.delay(100); // 避免过快插入
+            } catch (error) {
+              console.warn(`图片${i + 1}插入失败:`, error);
+            }
+          }
+        }
+
+        return true;
+      } else {
+        // 没有图片，直接插入内容
+        quill.clipboard.dangerouslyPasteHTML(content);
+        return true;
+      }
+
+    } catch (error) {
+      console.error('Bilibili API注入失败:', error);
+      return false;
+    }
+  }
+
+  /**
+   * 使用Quill clipboard模块注入内容
+   */
+  async injectContentWithClipboard(quill, clipboard, content) {
+    try {
+      // 创建临时元素来解析HTML
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = content;
+
+      // 使用clipboard的convert方法将HTML转换为Delta
+      const delta = clipboard.convert(tempDiv);
+
+      // 清空编辑器并插入新内容
+      quill.setContents(delta);
+
+      return true;
+
+    } catch (error) {
+      console.error('clipboard注入失败:', error);
+      return false;
+    }
+  }
+
+  /**
+   * 使用insertEmbed API处理图片
+   */
+  async injectContentWithInsertEmbed(quill, content) {
+    try {
+      // 解析内容
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = content;
+      const images = tempDiv.querySelectorAll('img');
+
+      // 先清空编辑器
+      quill.setContents([]);
+
+      // 插入文本内容
+      images.forEach(img => img.remove());
+      const textContent = tempDiv.innerHTML;
+
+      if (textContent.trim()) {
+        quill.clipboard.dangerouslyPasteHTML(textContent);
+      }
+
+      // 逐个插入图片
+      for (let i = 0; i < images.length; i++) {
+        const img = images[i];
+        if (img.src && img.src.startsWith('data:image/')) {
+          try {
+            const selection = quill.getSelection() || { index: quill.getLength() };
+
+            // 使用insertEmbed插入图片
+            quill.insertEmbed(selection.index, 'image', img.src, 'user');
+
+            await this.delay(100);
+          } catch (error) {
+            console.warn(`图片${i + 1}insertEmbed失败:`, error);
+          }
+        }
+      }
+
+      return true;
+
+    } catch (error) {
+      console.error('insertEmbed注入失败:', error);
       return false;
     }
   }
@@ -1951,79 +2141,7 @@ class BilibiliAdapter extends MutationObserverBase {
     }
   }
 
-  /**
-   * 处理富文本内容中的图片
-   */
-  async processImagesInContent(container, data) {
-    console.log('🖼️ 处理富文本内容中的图片...');
-
-    try {
-      // 查找所有图片元素
-      const images = container.querySelectorAll('img');
-
-      for (const img of images) {
-        // 处理Base64图片
-        if (img.src.startsWith('data:image/')) {
-          console.log('检测到Base64图片，开始处理...');
-
-          try {
-            // 将Base64图片转换为File对象
-            const file = await this.convertBase64ToFile(img.src);
-
-            if (file) {
-              console.log('Base64图片转换成功:', file.name);
-              // 这里可以实现图片上传逻辑
-              // 暂时保留原始Base64
-            }
-          } catch (error) {
-            console.warn('Base64图片处理失败:', error);
-          }
-        }
-
-        // 清理图片属性，只保留src和alt
-        const src = img.src;
-        const alt = img.alt || '';
-
-        img.removeAttribute('class');
-        img.removeAttribute('style');
-        img.removeAttribute('data-src');
-        img.src = src;
-        img.alt = alt;
-      }
-
-    } catch (error) {
-      console.error('图片处理失败:', error);
-    }
-  }
-
-  /**
-   * 将Base64图片转换为File对象
-   */
-  async convertBase64ToFile(base64Src) {
-    try {
-      const [header, base64Data] = base64Src.split(',');
-      const mimeMatch = header.match(/data:([^;]+)/);
-      const mimeType = mimeMatch ? mimeMatch[1] : 'image/png';
-
-      const byteCharacters = atob(base64Data);
-      const byteNumbers = new Array(byteCharacters.length);
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
-      }
-
-      const byteArray = new Uint8Array(byteNumbers);
-      const blob = new Blob([byteArray], { type: mimeType });
-
-      const fileName = `article_image_${Date.now()}.${mimeType.split('/')[1]}`;
-      return new File([blob], fileName, {
-        type: mimeType,
-        lastModified: Date.now()
-      });
-    } catch (error) {
-      console.error('Base64转File失败:', error);
-      return null;
-    }
-  }
+  // 旧的图片处理方法已移除，功能已集成到preprocessContentForQuill方法中
 }
 
 // 将适配器注册到全局
