@@ -76,6 +76,13 @@ const TITLE_LABEL_TEXTS = {
   SHORT_VIDEO: '标题 <span class="text-gray-400">（全部平台）</span>'
 };
 
+// 提示词标签常量
+const PROMPT_LABEL_TEXTS = {
+  DEFAULT: '+',
+  TOOLTIP_DEFAULT: '点击选择提示词模板',
+  TOOLTIP_SELECTED: '上次使用: {promptName}，点击重新选择'
+};
+
 // 提示词选择器配置常量
 const PROMPT_SELECTOR_CONFIG = {
   DELAYS: {
@@ -3078,6 +3085,26 @@ function updateTitleLabelText(contentType) {
     : TITLE_LABEL_TEXTS.DEFAULT;
 }
 
+// 统一的提示词标签更新函数
+function updatePromptLabel(platformId, promptName = null, isSelected = false) {
+  const promptLabel = promptDOMCache.getPromptLabel(platformId);
+  if (!promptLabel) return;
+
+  if (promptName && isSelected) {
+    // 显示选中的提示词名称
+    promptLabel.textContent = promptName;
+    promptLabel.classList.remove('text-gray-600');
+    promptLabel.classList.add('text-blue-600');
+    promptLabel.title = PROMPT_LABEL_TEXTS.TOOLTIP_SELECTED.replace('{promptName}', promptName);
+  } else {
+    // 显示默认的"+"符号
+    promptLabel.textContent = PROMPT_LABEL_TEXTS.DEFAULT;
+    promptLabel.classList.remove('text-blue-600');
+    promptLabel.classList.add('text-gray-600');
+    promptLabel.title = PROMPT_LABEL_TEXTS.TOOLTIP_DEFAULT;
+  }
+}
+
 // 全局统一DOM缓存实例
 const domCache = new DOMCache();
 
@@ -3822,15 +3849,8 @@ function restorePromptSelectorState(platformId) {
     console.log(`恢复平台 ${platformId} 的提示词状态:`, config.selectedPrompt);
   }
 
-  // 统一处理标签状态
-  if (promptLabel) {
-    const hasHistory = config.selectedPrompt;
-    promptLabel.textContent = hasHistory ? config.selectedPrompt : '无模板';
-    promptLabel.className = promptLabel.className.replace(/text-(blue|gray)-600/g, '') + ' text-gray-600';
-    promptLabel.title = hasHistory
-      ? `上次使用: ${config.selectedPrompt}，点击重新选择`
-      : '点击选择提示词模板';
-  }
+  // 使用统一函数处理标签状态
+  updatePromptLabel(platformId, config.selectedPrompt, !!config.selectedPrompt);
 
   // 统一处理复选框状态
   if (promptCheckbox) {
@@ -4072,15 +4092,9 @@ function selectPromptForPlatform(platformId, promptName) {
     isEnabled: true
   });
 
-  // 更新UI显示
-  const promptLabel = promptDOMCache.getPromptLabel(platformId);
+  // 使用统一函数更新UI显示
+  updatePromptLabel(platformId, promptName, true);
   const promptCheckbox = promptDOMCache.getPromptCheckbox(platformId);
-
-  if (promptLabel) {
-    promptLabel.textContent = promptName;
-    promptLabel.classList.add('text-blue-600');
-    promptLabel.classList.remove('text-gray-600');
-  }
 
   if (promptCheckbox) {
     promptCheckbox.checked = true;
@@ -4105,15 +4119,9 @@ function removePromptFromPlatform(platformId, promptName) {
       isEnabled: false
     });
 
-    // 更新UI显示
-    const promptLabel = promptDOMCache.getPromptLabel(platformId);
+    // 使用统一函数更新UI显示
+    updatePromptLabel(platformId, null, false);
     const promptCheckbox = promptDOMCache.getPromptCheckbox(platformId);
-
-    if (promptLabel) {
-      promptLabel.textContent = '无模板';
-      promptLabel.classList.remove('text-blue-600');
-      promptLabel.classList.add('text-gray-600');
-    }
 
     if (promptCheckbox) {
       promptCheckbox.checked = false;
@@ -4218,19 +4226,6 @@ function createPageContent() {
   const root = document.getElementById('main-root');
 
   root.innerHTML = `
-    <!-- Header -->
-    <header class="bg-white border-b border-gray-200 shadow-sm">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="flex items-center justify-between h-16">
-          <div class="flex items-center">
-            <div class="flex-shrink-0">
-              <h1 class="text-xl font-semibold text-gray-900">动态发布助手</h1>
-            </div>
-          </div>
-        </div>
-      </div>
-    </header>
-
     <!-- Main Content -->
     <main class="content-area">
       <div class="form-grid">
@@ -4511,7 +4506,7 @@ function createPageContent() {
                           class="text-xs text-gray-600 cursor-pointer hover:text-blue-600 transition-colors prompt-label whitespace-nowrap"
                           data-platform-id="${platform.id}"
                         >
-                          无模板
+                          ${PROMPT_LABEL_TEXTS.DEFAULT}
                         </span>
                       </div>
                     </div>
@@ -4523,6 +4518,11 @@ function createPageContent() {
         </div>
       </div>
     </main>
+
+    <!-- Bottom Brand -->
+    <div class="brand-footer">
+      <span class="brand-text">MomentDots</span>
+    </div>
   `;
 
   // 添加页面样式
@@ -5531,6 +5531,7 @@ function addPageStyles() {
       /* 提示词选择器样式 */
       .prompt-selector-container {
         position: relative;
+        min-width: 70px;
       }
 
       .prompt-checkbox {
@@ -5632,6 +5633,21 @@ function addPageStyles() {
         .prompt-selector-container {
           display: none;
         }
+      }
+
+      /* 底部品牌标识样式 */
+      .brand-footer {
+        position: fixed;
+        bottom: 20px;
+        left: 20px;
+        z-index: 100;
+      }
+
+      .brand-text {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: #374151;
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
       }
     `;
     document.head.appendChild(style);
@@ -6066,7 +6082,7 @@ function renderPlatformList() {
             class="text-xs text-gray-600 cursor-pointer hover:text-blue-600 transition-colors prompt-label whitespace-nowrap"
             data-platform-id="${platform.id}"
           >
-            无模板
+            ${PROMPT_LABEL_TEXTS.DEFAULT}
           </span>
         </div>
       </div>
