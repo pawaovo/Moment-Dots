@@ -234,6 +234,27 @@ class WeiboAdapter extends FileProcessorBase {
   }
 
   /**
+   * 请求Background Script激活标签页（用于解决剪贴板API焦点问题）
+   * @param {string} operation - 操作类型（如 'injectContent'）
+   * @returns {Promise<Object>} 激活结果
+   */
+  async requestTabActivation(operation) {
+    try {
+      const response = await chrome.runtime.sendMessage({
+        action: 'activateTabForContentInjection',
+        platform: this.platform,
+        operation: operation
+      });
+
+      return response;
+
+    } catch (error) {
+      this.logError('标签页激活请求失败:', error);
+      return { success: false, activated: false, error: error.message };
+    }
+  }
+
+  /**
    * 延迟函数
    * @param {number} ms - 延迟毫秒数
    */
@@ -1381,21 +1402,9 @@ class WeiboAdapter extends FileProcessorBase {
         await this.injectArticleTitle(titleToInject);
       }
 
-      // 3. 注入导语（如果提供）- 添加详细调试
-      this.log('🔍 检查导语数据:', {
-        hasSummary: !!summaryToInject,
-        summaryValue: summaryToInject,
-        summaryType: typeof summaryToInject,
-        summaryLength: summaryToInject ? summaryToInject.length : 0,
-        summaryTrimmed: summaryToInject ? summaryToInject.trim() : '',
-        allDataKeys: Object.keys(data)
-      });
-
+      // 3. 注入导语（如果提供）
       if (summaryToInject && summaryToInject.trim()) {
-        this.log('📝 开始注入导语...');
-        await this.injectArticleSummary(data.summary);
-      } else {
-        this.log('⚠️ 跳过导语注入 - 数据为空或不存在');
+        await this.injectArticleSummary(summaryToInject);
       }
 
       // 4. 处理富文本内容
@@ -2197,6 +2206,15 @@ class WeiboAdapter extends FileProcessorBase {
         contentEditable: editor.contentEditable,
         ariaLabel: editor.getAttribute('aria-label')
       });
+
+      // 🎯 关键修复：在内容注入前激活标签页（解决剪贴板API焦点问题）
+      const activationResult = await this.requestTabActivation('injectContent');
+
+      if (activationResult.success && activationResult.activated) {
+        this.log('✅ 标签页已激活，剪贴板API可正常工作');
+      } else if (activationResult.error) {
+        this.log('⚠️ 标签页激活失败:', activationResult.error);
+      }
 
       // 使用统一的内容注入方法（已包含内容处理）
       const success = await this.injectContentToCKEditor(editor, content, data);

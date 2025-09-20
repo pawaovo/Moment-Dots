@@ -1659,17 +1659,6 @@ async function saveToStorageData() {
       articleData: appState.articleData // 保存文章相关数据（如概要等）
     };
 
-    // 添加详细的导语数据保存调试
-    console.log('🔍 [DEBUG] 保存数据到存储:', {
-      hasArticleData: !!dataToSave.articleData,
-      articleData: dataToSave.articleData,
-      excerpt: dataToSave.articleData?.excerpt,
-      excerptLength: dataToSave.articleData?.excerpt?.length || 0,
-      contentType: dataToSave.currentContentType,
-      platforms: dataToSave.selectedPlatforms?.length || 0,
-      timestamp: new Date().toISOString()
-    });
-
     await savePublishData(dataToSave);
   } catch (error) {
     Utils.handleError(error, '保存数据失败', false); // 不显示通知，避免干扰用户
@@ -1829,21 +1818,11 @@ function handleArticleTitleChange(event) {
 
 // 文章概要输入变化处理
 function handleArticleExcerptChange(event) {
-  // 概要内容可以存储在appState的额外字段中，或者合并到content中
-  // 这里我们将概要信息存储到appState的新字段中
+  // 使用统一的文章数据更新方法
   if (!appState.articleData) {
     appState.articleData = {};
   }
   appState.articleData.excerpt = event.target.value;
-
-  // 添加详细调试日志
-  console.log('🔍 [DEBUG] 概要输入变化:', {
-    value: event.target.value,
-    length: event.target.value.length,
-    appStateArticleData: appState.articleData,
-    timestamp: new Date().toISOString()
-  });
-
   saveToStorageData();
 }
 
@@ -2840,16 +2819,8 @@ async function buildPublishDataStructure(title, content, useFileIds = false, pla
     allFiles = [...images, ...videos];
   }
 
-  // 添加详细的导语数据调试
+  // 获取概要数据
   const summaryData = appState.articleData?.excerpt || '';
-  console.log('🔍 [DEBUG] 构建发布数据 - 导语字段:', {
-    hasArticleData: !!appState.articleData,
-    articleData: appState.articleData,
-    summaryData: summaryData,
-    summaryLength: summaryData.length,
-    summaryType: typeof summaryData,
-    timestamp: new Date().toISOString()
-  });
 
   const baseData = {
     title: title,
@@ -3186,15 +3157,6 @@ function updateUI(skipContentTypeUpdate = false) {
   if (articleExcerptInput) {
     const excerptValue = appState.articleData?.excerpt || '';
     articleExcerptInput.value = excerptValue;
-
-    // 添加调试日志
-    console.log('🔍 [DEBUG] UI更新 - 概要输入框:', {
-      hasExcerptInput: !!articleExcerptInput,
-      excerptValue: excerptValue,
-      excerptLength: excerptValue.length,
-      appStateArticleData: appState.articleData,
-      timestamp: new Date().toISOString()
-    });
   }
   if (articleRichEditor) articleRichEditor.innerHTML = appState.content;
 
@@ -7676,6 +7638,18 @@ class ArticleManager {
   }
 
   /**
+   * 统一的文章数据更新方法（避免重复代码）
+   */
+  updateArticleData(data) {
+    if (!appState.articleData) {
+      appState.articleData = {};
+    }
+
+    Object.assign(appState.articleData, data);
+    saveToStorageData();
+  }
+
+  /**
    * 填充标题输入框
    */
   fillTitleInput(article) {
@@ -7694,6 +7668,10 @@ class ArticleManager {
     const { excerptInput } = this.getArticleElements();
     if (excerptInput && article.excerpt) {
       excerptInput.value = article.excerpt;
+
+      // 同步更新appState.articleData
+      this.updateArticleData({ excerpt: article.excerpt });
+
       // 触发字数统计更新
       characterCountManager.updateCount('article-excerpt-input', article.excerpt);
     }
@@ -7978,7 +7956,15 @@ class ArticleManager {
     articleEditor.value = content;
     appState.content = content;
 
-    // 添加成功提示
+    // 存储完整的文章数据
+    this.updateArticleData({
+      excerpt: article.excerpt || '',
+      title: article.title || '',
+      url: article.url || '',
+      siteName: article.siteName || '',
+      readingTime: article.readingTime || 0
+    });
+
     console.log(`✅ 文章内容已填充到编辑器 (${this.currentFormat === 'markdown' ? 'Markdown' : '纯文本'}格式)`);
   }
 

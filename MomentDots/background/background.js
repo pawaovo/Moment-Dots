@@ -1442,7 +1442,7 @@ chrome.action.onClicked.addListener(async () => {
 });
 
 // 监听消息
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log('Background received message:', message);
 
   // 分块文件上传消息处理
@@ -1852,6 +1852,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   } else if (message.action === 'extractArticle') {
     // 文章抓取请求
     handleArticleExtraction(message.url, sendResponse);
+    return true; // 保持消息通道开放
+
+  } else if (message.action === 'activateTabForContentInjection') {
+    // 激活标签页用于内容注入（解决剪贴板API焦点问题）
+    handleTabActivationForContentInjection(message, sender, sendResponse);
     return true; // 保持消息通道开放
 
   }
@@ -2353,6 +2358,44 @@ async function handleArticleExtraction(url, sendResponse) {
       success: false,
       error: error.message || '抓取失败，请重试'
     });
+  }
+}
+
+/**
+ * 处理标签页激活请求（用于解决剪贴板API焦点问题）
+ * 只在需要注入内容时激活标签页，其他操作保持后台执行
+ */
+async function handleTabActivationForContentInjection(message, sender, sendResponse) {
+  try {
+    const { platform, operation } = message;
+    const tab = sender.tab;
+
+    // 参数验证
+    if (!platform || !operation || !tab) {
+      throw new Error('缺少必要参数或标签页信息');
+    }
+
+    // 只有在注入内容时才激活标签页
+    if (operation !== 'injectContent') {
+      sendResponse({ success: true, activated: false, reason: 'Not content injection' });
+      return;
+    }
+
+    console.log(`🎯 激活标签页支持剪贴板API [${platform}]`, { tabId: tab.id });
+
+    // 激活窗口和标签页
+    await chrome.windows.update(tab.windowId, { focused: true });
+    await chrome.tabs.update(tab.id, { active: true });
+
+    // 等待激活完成
+    await new Promise(resolve => setTimeout(resolve, 300));
+
+    console.log('✅ 标签页激活完成');
+    sendResponse({ success: true, activated: true, tabId: tab.id });
+
+  } catch (error) {
+    console.error('❌ 标签页激活失败:', error);
+    sendResponse({ success: false, error: error.message });
   }
 }
 
