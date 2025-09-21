@@ -180,7 +180,6 @@
         "styles/*",
         "main/*",
         "shared/*",
-        "test/*",
         "libs/readability/Readability.js",
         "libs/readability/Readability-readerable.js",
         "libs/readability/JSDOMParser.js",
