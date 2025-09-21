@@ -5078,13 +5078,18 @@ function addPageStyles() {
         border-radius: 8px;
         overflow: hidden;
         background: #000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
 
       .short-video-preview-video {
         width: 100%;
         height: 100%;
         object-fit: cover;
+        object-position: center;
         border-radius: 8px;
+        display: block; /* 确保视频元素正确显示 */
       }
 
       .short-video-preview-overlay {
@@ -5202,6 +5207,10 @@ function addPageStyles() {
       .video-upload-area {
         min-height: 160px;
         height: 160px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden; /* 确保内容不会超出边界 */
       }
 
       .horizontal-cover-area {
@@ -6186,7 +6195,10 @@ function createShortVideoUploadArea() {
   const shortVideoUploadHTML = `
     <div id="short-video-upload-area" class="space-y-3" style="display: block;">
       <!-- 短视频上传区域计数 -->
-      <div class="flex justify-end">
+      <div class="flex justify-between items-center">
+        <div class="text-xs text-gray-500 text-left">
+          大视频上传不稳定，封面上传不可用。修复中
+        </div>
         <div class="text-xs text-gray-500">
           视频: <span id="video-count">0</span>/1 | 封面: <span id="cover-count">0</span>/2
         </div>
