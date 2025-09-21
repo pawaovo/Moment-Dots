@@ -3,12 +3,14 @@
  * 负责在编辑页面注入内容
  */
 
-// 日志配置
-const DEBUG_MODE = false; // 生产环境设为false
+// 日志配置 - 使用条件声明避免重复声明
+if (typeof window.WEIXIN_DEBUG_MODE === 'undefined') {
+  window.WEIXIN_DEBUG_MODE = false; // 生产环境设为false
+}
 
-function debugLog(...args) {
-  if (DEBUG_MODE) {
-    console.log(...args);
+function debugLogEdit(...args) {
+  if (window.WEIXIN_DEBUG_MODE) {
+    console.log('[WeChat-Edit]', ...args);
   }
 }
 
@@ -18,8 +20,8 @@ function infoLog(...args) {
 }
 
 infoLog('🚀 微信公众号编辑页Content Script已加载');
-debugLog('当前页面URL:', window.location.href);
-debugLog('页面标题:', document.title);
+debugLogEdit('当前页面URL:', window.location.href);
+debugLogEdit('页面标题:', document.title);
 
 // 优化的DOM元素缓存
 const DOMCache = {
@@ -132,7 +134,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const hasEditableArea = DOMCache.getProseMirrorEditors().length > 0;
         const needsWaiting = !hasTitleInput || !hasEditableArea;
 
-        debugLog('🔍 页面元素检查:', {
+        debugLogEdit('🔍 页面元素检查:', {
           hasTitleInput,
           hasEditableArea,
           needsWaiting
@@ -441,7 +443,7 @@ function waitForPageAndEditorLoad() {
       // 页面就绪条件：只要有标题输入、描述区域或微信编辑器任一即可（文件输入控件为可选）
       const isReady = isPageReady && (hasTitleInput || hasDescriptionArea || hasWeixinEditor);
 
-      debugLog(`📊 页面加载检查 ${checkCount}/${maxChecks}:`, {
+      debugLogEdit(`📊 页面加载检查 ${checkCount}/${maxChecks}:`, {
         isPageReady,
         hasFileInputs: hasFileInputs ? '✅ 可用' : '⚠️ 不可用（可选）',
         hasTitleInput: hasTitleInput ? '✅ 可用' : '❌ 不可用',
@@ -508,7 +510,7 @@ function isFileUploadSupported() {
                            window.location.href.includes('article') ||
                            document.title.includes('文章');
 
-  debugLog('🔍 文件上传支持检查:', {
+  debugLogEdit('🔍 文件上传支持检查:', {
     fileInputCount: fileInputs.length,
     uploadElementCount: uploadElements.length,
     isArticleEditPage: isArticleEditPage,
@@ -598,7 +600,7 @@ async function handleImageUpload(fileIds) {
     }
 
     // 查找第二个文件输入控件（基于Playwright MCP测试发现）
-    debugLog(`🔍 找到 ${fileInputs.length} 个文件输入控件`);
+    debugLogEdit(`🔍 找到 ${fileInputs.length} 个文件输入控件`);
 
     // 详细记录每个文件输入控件的信息
     fileInputs.forEach((input, index) => {
@@ -669,7 +671,7 @@ function validateAndLimitFiles(files) {
   const validFiles = [];
   let imageCount = 0;
 
-  debugLog(`📊 开始文件验证，总文件数: ${files.length}，平台限制: ${limits.maxMediaFiles} 张图片`);
+  debugLogEdit(`📊 开始文件验证，总文件数: ${files.length}，平台限制: ${limits.maxMediaFiles} 张图片`);
 
   for (const file of files) {
     // 检查文件类型

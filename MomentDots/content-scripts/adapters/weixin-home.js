@@ -7,20 +7,22 @@
  * - 文章模式：点击"文章"按钮 (weixin-article平台)
  */
 
-// 日志配置
-const DEBUG_MODE = false; // 生产环境设为false
+// 日志配置 - 使用条件声明避免重复声明
+if (typeof window.WEIXIN_DEBUG_MODE === 'undefined') {
+  window.WEIXIN_DEBUG_MODE = false; // 生产环境设为false
+}
 
-function debugLog(...args) {
-  if (DEBUG_MODE) {
-    console.log(...args);
+function debugLogHome(...args) {
+  if (window.WEIXIN_DEBUG_MODE) {
+    console.log('[WeChat-Home]', ...args);
   }
 }
 
-debugLog('微信公众号首页Content Script已加载');
+debugLogHome('微信公众号首页Content Script已加载');
 
 // 监听来自Background Script的消息
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  debugLog('首页收到消息:', message);
+  debugLogHome('首页收到消息:', message);
 
   if (message.action === 'clickImageTextButton') {
     // 兼容原有的图文按钮点击（动态模式）
@@ -109,7 +111,7 @@ const CONTAINER_SELECTORS = [
  */
 async function clickButtonByText(buttonText, buttonName) {
   try {
-    debugLog(`开始查找并点击${buttonName}...`);
+    debugLogHome(`开始查找并点击${buttonName}...`);
 
     // 等待页面完全加载
     await waitForPageLoad();
@@ -139,7 +141,7 @@ async function findButtonElement(buttonText, buttonName) {
       try {
         const element = document.querySelector(selector);
         if (element && element.offsetParent !== null) {
-          debugLog(`找到${buttonName}，使用选择器:`, selector);
+          debugLogHome(`找到${buttonName}，使用选择器:`, selector);
           return element;
         }
       } catch (e) {
@@ -149,13 +151,13 @@ async function findButtonElement(buttonText, buttonName) {
   }
 
   // 方法2：使用文本内容查找
-  debugLog(`选择器方法失败，尝试文本内容查找${buttonName}...`);
+  debugLogHome(`选择器方法失败，尝试文本内容查找${buttonName}...`);
   for (const containerSelector of CONTAINER_SELECTORS) {
     const containers = document.querySelectorAll(containerSelector);
     for (const element of containers) {
       if (element.textContent && element.textContent.trim() === buttonText &&
           element.offsetParent !== null && element.click) {
-        debugLog(`通过文本内容查找找到${buttonName}`);
+        debugLogHome(`通过文本内容查找找到${buttonName}`);
         return element;
       }
     }
@@ -172,7 +174,7 @@ async function findButtonElement(buttonText, buttonName) {
  * @returns {Object} - 点击结果
  */
 async function performButtonClick(button, buttonName, buttonText) {
-  debugLog(`准备点击${buttonName}...`);
+  debugLogHome(`准备点击${buttonName}...`);
 
   // 滚动到按钮位置确保可见
   button.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -183,7 +185,7 @@ async function performButtonClick(button, buttonName, buttonText) {
   // 点击按钮
   button.click();
 
-  debugLog(`${buttonName}点击完成`);
+  debugLogHome(`${buttonName}点击完成`);
 
   // 等待一下确保点击生效
   await new Promise(resolve => setTimeout(resolve, 1000));
@@ -211,4 +213,4 @@ function waitForPageLoad() {
   });
 }
 
-debugLog('微信公众号首页Content Script初始化完成');
+debugLogHome('微信公众号首页Content Script初始化完成');
