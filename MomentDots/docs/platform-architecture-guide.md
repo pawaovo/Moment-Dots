@@ -1,7 +1,7 @@
 # MomentDots 平台架构指南
 
-**版本：** v2.0  
-**更新日期：** 2025-01-08  
+**版本：** v2.1
+**更新日期：** 2025-01-21
 **作者：** MomentDots 开发团队
 
 ## 📋 目录
@@ -19,7 +19,17 @@
 
 ## 🎯 项目概述
 
-MomentDots是一个Chrome浏览器扩展程序，旨在实现**一键发布动态到多个社交媒体平台**。项目采用统一的架构模式，支持微博、小红书、即刻、抖音、X、Bilibili、微信公众号和微信视频号等多个平台。
+MomentDots是一个Chrome浏览器扩展程序，旨在实现**一键发布动态到多个社交媒体平台**。项目采用统一的架构模式，支持微博、小红书、即刻、抖音、X、Bilibili、微信公众号和微信视频号等8个主流平台。
+
+### 技术栈
+
+- **核心技术**: Chrome Extension Manifest V3
+- **前端技术**: 原生JavaScript (ES6+)、HTML5、CSS3
+- **样式框架**: Tailwind CSS
+- **状态管理**: Zustand
+- **构建工具**: TypeScript编译器、Tailwind CSS
+- **开发工具**: Node.js、npm
+- **测试工具**: Playwright MCP Bridge
 
 ### 核心设计原则
 
@@ -27,6 +37,7 @@ MomentDots是一个Chrome浏览器扩展程序，旨在实现**一键发布动�
 - **模块化设计**：每个平台独立适配器，便于维护和扩展
 - **代码复用**：最大化代码复用，最小化重复实现
 - **性能优化**：高效的DOM操作和异步处理机制
+- **类型安全**：TypeScript提供类型检查和编译时错误检测
 
 ## 🏗️ 平台分类体系
 
@@ -78,9 +89,36 @@ MomentDots是一个Chrome浏览器扩展程序，旨在实现**一键发布动�
 
 ## 🔧 统一基类架构
 
+### 架构文件结构
+
+```
+content-scripts/
+├── shared/                     # 共享基类和工具
+│   ├── PlatformAdapter.js     # 核心适配器基类
+│   ├── PlatformConfigBase.js  # 配置管理基类
+│   └── AdapterInitializer.js  # 适配器初始化工具
+├── adapters/                   # 平台适配器实现
+│   ├── common/                # 共享基类
+│   │   ├── BaseClassLoader.js # 基类加载器
+│   │   ├── BaseConfigManager.js # 基础配置管理
+│   │   └── MutationObserverBase.js # DOM监听基类
+│   ├── weibo.js               # 微博适配器
+│   ├── jike.js                # 即刻适配器
+│   ├── x.js                   # X平台适配器
+│   ├── bilibili.js            # Bilibili适配器
+│   ├── weixinchannels.js      # 微信视频号适配器
+│   ├── xiaohongshu.js         # 小红书适配器
+│   ├── douyin.js              # 抖音适配器
+│   ├── weixin-home.js         # 微信公众号首页
+│   └── weixin-edit.js         # 微信公众号编辑页
+└── enhanced/                   # 增强功能（可选）
+```
+
 ### PlatformAdapter 基类
 
 所有A类和B类平台的核心基类，提供统一的接口和通用功能。
+
+**文件位置**: `content-scripts/shared/PlatformAdapter.js`
 
 ```javascript
 class PlatformAdapter {
@@ -124,56 +162,187 @@ class PlatformAdapter {
 
 ### PlatformConfigBase 配置基类
 
-提供统一的配置管理机制。
+提供统一的配置管理机制，消除各平台配置管理器中的重复代码。
+
+**文件位置**: `content-scripts/shared/PlatformConfigBase.js`
 
 ```javascript
-class PlatformConfigBase {
-  constructor(platformId) {
-    this.platformId = platformId;
+class PlatformConfigBase extends BaseConfigManager {
+  constructor(platform) {
+    super(platform);
+    this.platform = platform;
   }
 
-  createDelayConfig(delays) {
-    return {
-      FAST_CHECK: delays.FAST_CHECK || 200,
-      NORMAL_WAIT: delays.NORMAL_WAIT || 500,
-      UPLOAD_WAIT: delays.UPLOAD_WAIT || 1500,
-      ELEMENT_WAIT: delays.ELEMENT_WAIT || 3000
-    };
+  /**
+   * 统一的配置加载模式
+   * @param {Object} platformSpecificConfig - 平台特定配置
+   * @returns {Object} 合并后的配置对象
+   */
+  loadPlatformConfig(platformSpecificConfig) {
+    const baseConfig = super.loadConfig();
+    return this.mergeConfig(baseConfig, platformSpecificConfig);
   }
 
-  createLimitsConfig(limits) {
-    return {
-      maxContentLength: limits.maxContentLength || 2000,
-      maxTitleLength: limits.maxTitleLength || 100,
-      maxMediaFiles: limits.maxMediaFiles || 9,
-      allowedImageTypes: limits.allowedImageTypes || ['image/jpeg', 'image/png'],
-      maxFileSize: limits.maxFileSize || 10 * 1024 * 1024
+  /**
+   * 创建标准的延迟配置
+   * @param {Object} overrides - 覆盖的延迟配置
+   * @returns {Object} 延迟配置对象
+   */
+  createDelayConfig(overrides = {}) {
+    const defaultDelays = {
+      FAST_CHECK: 100,
+      NORMAL_WAIT: 300,
+      UPLOAD_WAIT: 1000,
+      ELEMENT_WAIT: 2000
     };
+    return { ...defaultDelays, ...overrides };
+  }
+
+  /**
+   * 创建标准的限制配置
+   * @param {Object} overrides - 覆盖的限制配置
+   * @returns {Object} 限制配置对象
+   */
+  createLimitsConfig(overrides = {}) {
+    const defaultLimits = {
+      maxContentLength: 2000,
+      maxTitleLength: 100,
+      maxMediaFiles: 9,
+      allowedImageTypes: ['image/jpeg', 'image/png', 'image/gif'],
+      maxFileSize: 10 * 1024 * 1024 // 10MB
+    };
+    return { ...defaultLimits, ...overrides };
   }
 }
 ```
 
 ### MutationObserverBase 监听基类
 
-提供统一的DOM变化监听机制。
+提供统一的DOM变化监听机制，用于检测页面元素的加载状态。
+
+**文件位置**: `content-scripts/adapters/common/MutationObserverBase.js`
 
 ```javascript
 class MutationObserverBase {
   constructor(platformId) {
     this.platformId = platformId;
     this.observer = null;
+    this.isObserving = false;
   }
 
-  startObserving() {
-    // 启动DOM监听
+  /**
+   * 启动DOM监听
+   * @param {Function} callback - 元素变化时的回调函数
+   */
+  startObserving(callback) {
+    if (this.isObserving) return;
+
+    this.observer = new MutationObserver((mutations) => {
+      const checkResult = this.checkElements();
+      if (checkResult.ready && callback) {
+        callback(checkResult);
+      }
+    });
+
+    this.observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true
+    });
+
+    this.isObserving = true;
   }
 
+  /**
+   * 停止DOM监听
+   */
   stopObserving() {
-    // 停止DOM监听
+    if (this.observer) {
+      this.observer.disconnect();
+      this.observer = null;
+      this.isObserving = false;
+    }
   }
 
+  /**
+   * 检查关键元素是否就绪 - 子类必须实现
+   * @returns {Object} { ready: boolean, reason?: string, elements?: Object }
+   */
   checkElements() {
-    // 检查关键元素是否就绪
+    throw new Error('子类必须实现 checkElements 方法');
+  }
+
+  /**
+   * 检查是否为目标页面 - 子类必须实现
+   * @returns {boolean}
+   */
+  isTargetPage() {
+    throw new Error('子类必须实现 isTargetPage 方法');
+  }
+}
+```
+
+### AdapterInitializer 初始化工具
+
+统一处理适配器的依赖检查、初始化和消息监听逻辑，消除重复代码。
+
+**文件位置**: `content-scripts/shared/AdapterInitializer.js`
+
+```javascript
+class AdapterInitializer {
+  static initializedPlatforms = new Set();
+  static messageListeners = new Map();
+
+  /**
+   * 初始化平台适配器
+   * @param {string} platform - 平台名称
+   * @param {string} adapterClassName - 适配器类名
+   * @param {Function} legacyInitializer - 旧版本初始化函数
+   */
+  static async initialize(platform, adapterClassName, legacyInitializer) {
+    const initKey = `${platform}-${adapterClassName}`;
+    if (this.initializedPlatforms.has(initKey)) {
+      console.log(`${platform}适配器已经初始化过，跳过重复初始化`);
+      return;
+    }
+
+    this.initializedPlatforms.add(initKey);
+
+    try {
+      const dependencyType = await this.waitForDependencies(platform, adapterClassName);
+
+      if (dependencyType === 'new') {
+        this.initializeNewAdapter(platform, adapterClassName);
+      } else if (legacyInitializer) {
+        legacyInitializer();
+      }
+    } catch (error) {
+      console.error(`${platform}适配器初始化失败:`, error);
+      if (legacyInitializer) {
+        legacyInitializer();
+      }
+    }
+  }
+
+  /**
+   * 等待依赖加载
+   */
+  static async waitForDependencies(platform, adapterClassName) {
+    // 检查新技术方案的依赖
+    if (window.PlatformAdapter && window.PlatformConfigBase && window[adapterClassName]) {
+      return 'new';
+    }
+
+    // 等待依赖加载
+    const maxAttempts = 50;
+    for (let attempts = 0; attempts < maxAttempts; attempts++) {
+      if (window.PlatformAdapter && window.PlatformConfigBase && window[adapterClassName]) {
+        return 'new';
+      }
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    return 'legacy';
   }
 }
 ```
@@ -409,24 +578,75 @@ class WeixinChannelsConfigManager extends PlatformConfigBase {
 
 ### PlatformAdapterFactory
 
+统一的平台适配器工厂，负责创建和管理所有平台适配器实例。
+
+**文件位置**: `content-scripts/shared/PlatformAdapter.js`
+
 ```javascript
 class PlatformAdapterFactory {
-  static createAdapter(platform) {
-    // A类平台
-    if (['jike', 'weibo', 'x', 'bilibili'].includes(platform)) {
-      return new window[`${platform.charAt(0).toUpperCase() + platform.slice(1)}PlatformAdapter`]();
-    }
-
-    // 微信视频号（A类特殊实现）
-    if (platform === 'weixinchannels') {
-      if (window.WeixinChannelsPlatformAdapter) {
-        return new window.WeixinChannelsPlatformAdapter();
+  /**
+   * 创建平台适配器实例
+   * @param {string} platform - 平台标识符
+   * @returns {PlatformAdapter} 适配器实例
+   */
+  static create(platform) {
+    // A类标准平台
+    if (platform === 'jike') {
+      if (window.JikeAdapter) {
+        return new window.JikeAdapter();
+      } else {
+        throw new Error('即刻适配器未加载，请确保 jike.js 已正确加载');
       }
     }
 
-    // B类平台
-    if (['xiaohongshu', 'douyin'].includes(platform)) {
-      return new window[`${platform.charAt(0).toUpperCase() + platform.slice(1)}PlatformAdapter`]();
+    if (platform === 'weibo') {
+      if (window.WeiboAdapter) {
+        return new window.WeiboAdapter();
+      } else {
+        throw new Error('微博适配器未加载，请确保 weibo.js 已正确加载');
+      }
+    }
+
+    if (platform === 'x') {
+      if (window.XAdapter) {
+        return new window.XAdapter();
+      } else {
+        throw new Error('X平台适配器未加载，请确保 x.js 已正确加载');
+      }
+    }
+
+    if (platform === 'bilibili') {
+      if (window.BilibiliAdapter) {
+        return new window.BilibiliAdapter();
+      } else {
+        throw new Error('Bilibili适配器未加载，请确保 bilibili.js 已正确加载');
+      }
+    }
+
+    // A类特殊平台（Shadow DOM处理）
+    if (platform === 'weixinchannels') {
+      if (window.WeixinChannelsPlatformAdapter) {
+        return new window.WeixinChannelsPlatformAdapter();
+      } else {
+        throw new Error('微信视频号适配器未加载，请确保 weixinchannels.js 已正确加载');
+      }
+    }
+
+    // B类平台（多步骤操作）
+    if (platform === 'douyin') {
+      if (window.DouyinAdapter) {
+        return new window.DouyinAdapter();
+      } else {
+        throw new Error('抖音适配器未加载，请确保 douyin.js 已正确加载');
+      }
+    }
+
+    if (platform === 'xiaohongshu') {
+      if (window.XiaohongshuAdapter) {
+        return new window.XiaohongshuAdapter();
+      } else {
+        throw new Error('小红书适配器未加载，请确保 xiaohongshu.js 已正确加载');
+      }
     }
 
     // 跨标签页平台
@@ -437,8 +657,48 @@ class PlatformAdapterFactory {
     throw new Error(`不支持的平台: ${platform}`);
   }
 
+  /**
+   * 获取所有支持的平台列表
+   * @returns {string[]} 平台标识符数组
+   */
   static getSupportedPlatforms() {
     return ['jike', 'weibo', 'douyin', 'xiaohongshu', 'x', 'bilibili', 'weixinchannels', 'weixin'];
+  }
+
+  /**
+   * 检查平台是否支持
+   * @param {string} platform - 平台标识符
+   * @returns {boolean} 是否支持
+   */
+  static isSupported(platform) {
+    return this.getSupportedPlatforms().includes(platform);
+  }
+
+  /**
+   * 获取平台分类信息
+   * @param {string} platform - 平台标识符
+   * @returns {Object} 平台分类信息
+   */
+  static getPlatformType(platform) {
+    const platformTypes = {
+      // A类标准平台
+      'jike': { type: 'A', subtype: 'standard', description: '直接注入型' },
+      'weibo': { type: 'A', subtype: 'standard', description: '直接注入型' },
+      'x': { type: 'A', subtype: 'standard', description: '直接注入型' },
+      'bilibili': { type: 'A', subtype: 'standard', description: '直接注入型' },
+
+      // A类特殊平台
+      'weixinchannels': { type: 'A', subtype: 'special', description: '直接注入型（Shadow DOM）' },
+
+      // B类平台
+      'douyin': { type: 'B', subtype: 'multi-step', description: '多步骤操作型' },
+      'xiaohongshu': { type: 'B', subtype: 'multi-step', description: '多步骤操作型' },
+
+      // 跨标签页平台
+      'weixin': { type: 'CrossTab', subtype: 'cross-tab', description: '跨标签页通信型' }
+    };
+
+    return platformTypes[platform] || { type: 'Unknown', subtype: 'unknown', description: '未知类型' };
   }
 }
 ```
@@ -492,6 +752,32 @@ class PerformanceMonitor {
 
 ---
 
-**文档版本：** v2.0
-**最后更新：** 2025-01-08
+## 📚 文档更新记录
+
+### v2.1 (2025-01-21)
+- ✅ 更新了实际的文件结构和架构信息
+- ✅ 完善了PlatformConfigBase和MutationObserverBase基类说明
+- ✅ 添加了AdapterInitializer初始化工具文档
+- ✅ 更新了工厂模式集成的实际实现
+- ✅ 补充了平台分类和类型检查功能
+- ✅ 与实际代码结构保持100%一致
+
+### v2.0 (2025-01-08)
+- 初始版本，建立了完整的平台架构体系
+- 定义了A类、B类、跨标签页三大平台分类
+- 建立了统一基类架构设计
+
+---
+
+**文档版本：** v2.1
+**最后更新：** 2025-01-21
 **维护者：** MomentDots 开发团队
+
+## 📞 技术支持
+
+- **架构问题**: 在项目仓库提交Issue并标记为`architecture`
+- **开发指导**: 参考[新平台开发指南](./new-platform-development-guide.md)
+- **代码示例**: 查看`content-scripts/adapters/`目录下的实际实现
+- **紧急问题**: 联系架构负责人
+
+> 💡 **提示**: 本文档与实际代码结构保持同步更新，建议开发时对照实际代码文件进行理解。

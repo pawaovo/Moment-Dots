@@ -109,8 +109,8 @@
 
 ### 测试环境
 
-- **单元测试** - Jest + jsdom
-- **集成测试** - Playwright
+- **单元测试** - Jest + jsdom (规划中)
+- **集成测试** - Playwright MCP Bridge
 - **手动测试** - Chrome扩展开发者模式
 
 ## 📝 文档贡献指南

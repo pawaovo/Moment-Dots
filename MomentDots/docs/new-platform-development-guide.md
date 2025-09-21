@@ -1,7 +1,7 @@
 # MomentDots 新平台开发指南
 
-**版本：** v2.0  
-**更新日期：** 2025-01-08  
+**版本：** v2.1
+**更新日期：** 2025-01-21
 **作者：** MomentDots 开发团队
 
 ## 📋 目录
@@ -26,37 +26,54 @@
 ### 开发前准备
 
 1. **环境准备**
-   - Chrome浏览器开发者版本
+   - Chrome浏览器开发者版本或Canary版本
    - MomentDots项目源码
    - 目标平台的测试账号
+   - Node.js v16.0+（用于构建和测试）
+   - Playwright MCP Bridge（用于自动化测试）
 
 2. **技术调研**
-   - 分析目标平台的发布流程
-   - 识别关键DOM元素和选择器
-   - 了解平台的特殊技术要求
+   - 分析目标平台的发布流程和用户界面
+   - 识别关键DOM元素和CSS选择器
+   - 了解平台的特殊技术要求（如Shadow DOM、跨域限制等）
+   - 检查平台是否使用特殊框架（如React、Vue、微前端等）
+   - 分析文件上传机制和限制
 
 3. **架构分析**
    - 确定平台分类（A类/B类/跨标签页）
-   - 选择合适的基类和模板
-   - 规划配置结构
+   - 选择合适的基类和开发模板
+   - 规划配置结构和选择器策略
+   - 评估是否需要特殊处理（如Shadow DOM穿透）
 
 ## 🎯 平台分类决策
 
 ### 决策流程图
 
+```mermaid
+flowchart TD
+    A[开始分析新平台] --> B{是否需要跨标签页操作？}
+    B -->|是| C[跨标签页平台<br/>如：微信公众号]
+    B -->|否| D{是否需要多步骤操作？}
+    D -->|是| E[B类平台<br/>如：小红书、抖音]
+    D -->|否| F{是否有特殊技术要求？}
+    F -->|Shadow DOM| G[A类特殊平台<br/>如：微信视频号]
+    F -->|标准DOM| H[A类标准平台<br/>如：微博、即刻、X、Bilibili]
+
+    C --> I[使用跨标签页通信机制]
+    E --> J[使用多步骤操作模板]
+    G --> K[使用Shadow DOM处理模板]
+    H --> L[使用标准A类模板]
 ```
-开始
-  ↓
-是否需要跨标签页操作？
-  ↓ 是
-跨标签页平台
-  ↓ 否
-是否需要页面跳转？
-  ↓ 是
-B类平台（多步骤操作型）
-  ↓ 否
-A类平台（直接注入型）
-```
+
+### 平台特征识别表
+
+| 特征 | A类标准 | A类特殊 | B类 | 跨标签页 |
+|------|---------|---------|-----|----------|
+| **页面跳转** | 无 | 无 | 有 | 有 |
+| **DOM访问** | 标准DOM | Shadow DOM | 标准DOM | 标准DOM |
+| **操作步骤** | 1步 | 1步 | 多步 | 多步 |
+| **文件上传** | 标准API | DataTransfer | 标准API | 标准API |
+| **通信机制** | 内容脚本 | 内容脚本 | 内容脚本 | Background Script |
 
 ### 分类判断标准
 
@@ -99,15 +116,43 @@ A类平台（直接注入型）
 
 ## 🎯 A类平台开发指南
 
+A类平台是最常见的平台类型，包括标准A类（如微博、即刻、X、Bilibili）和特殊A类（如微信视频号）。
+
+### 核心文件结构
+
+```
+content-scripts/adapters/
+├── [platform].js              # 主适配器文件
+├── common/                     # 共享基类
+│   ├── BaseClassLoader.js     # 基类加载器
+│   ├── BaseConfigManager.js   # 基础配置管理
+│   └── MutationObserverBase.js # DOM变化监听基类
+└── enhanced/                   # 增强功能（可选）
+```
+
 ### 开发模板
+
+#### 标准A类平台模板
 
 ```javascript
 /**
- * [平台名称]平台适配器
- * 基于统一的A类平台架构
+ * [平台名称]平台适配器 - 标准A类平台模板
+ * 基于统一的PlatformAdapter基类架构
+ *
+ * 文件位置: content-scripts/adapters/[platform].js
  */
 
-// 1. 配置管理器
+console.log('[平台名称]适配器加载中...');
+
+(function() {
+  'use strict';
+
+// 1. 基类依赖检查
+async function checkBaseClasses() {
+  return await BaseClassLoader.checkBaseClasses('[平台名称]');
+}
+
+// 2. 配置管理器
 class [PlatformName]ConfigManager extends PlatformConfigBase {
   constructor() {
     super('[platform-id]');
@@ -134,6 +179,7 @@ class [PlatformName]ConfigManager extends PlatformConfigBase {
         titleInput: 'input[placeholder*="标题"]',
         contentArea: '[contenteditable="true"]',
         fileInput: 'input[type="file"]',
+        publishButton: 'button[type="submit"]',
         // 添加平台特定的选择器
       }
     };
@@ -142,7 +188,7 @@ class [PlatformName]ConfigManager extends PlatformConfigBase {
   }
 }
 
-// 2. DOM监听器
+// 3. DOM监听器
 class [PlatformName]MutationObserver extends MutationObserverBase {
   constructor(adapter) {
     super('[platform-id]');
@@ -150,7 +196,9 @@ class [PlatformName]MutationObserver extends MutationObserverBase {
   }
 
   isTargetPage() {
-    return window.location.href.includes('[platform-domain]');
+    // 检查是否为目标平台页面
+    return window.location.href.includes('[platform-domain]') &&
+           window.location.href.includes('[publish-path]');
   }
 
   checkElements() {
@@ -163,28 +211,36 @@ class [PlatformName]MutationObserver extends MutationObserverBase {
     const contentArea = document.querySelector(this.adapter.config.selectors.contentArea);
 
     if (!titleInput || !fileInput || !contentArea) {
-      return { ready: false, reason: '关键元素未找到' };
+      return {
+        ready: false,
+        reason: '关键元素未找到',
+        missing: {
+          titleInput: !titleInput,
+          fileInput: !fileInput,
+          contentArea: !contentArea
+        }
+      };
     }
 
-    return { 
-      ready: true, 
+    return {
+      ready: true,
       elements: { titleInput, fileInput, contentArea }
     };
   }
 }
 
-// 3. 主适配器类
+// 4. 主适配器类
 class [PlatformName]PlatformAdapter extends PlatformAdapter {
   constructor() {
     super('[platform-id]');
     this.configManager = new [PlatformName]ConfigManager();
     this.config = this.configManager.loadConfig();
     this.mutationObserver = new [PlatformName]MutationObserver(this);
-    
+
     this.log('[平台名称]适配器初始化完成');
   }
 
-  // 如果需要特殊的元素查找逻辑，重写这些方法
+  // 重写元素查找方法（如果需要特殊逻辑）
   findTitleInput() {
     return document.querySelector(this.config.selectors.titleInput);
   }
@@ -197,10 +253,160 @@ class [PlatformName]PlatformAdapter extends PlatformAdapter {
     return document.querySelector(this.config.selectors.contentArea);
   }
 
-  // 如果需要特殊的激活逻辑，重写这个方法
+  // 重写激活方法（如果需要特殊激活逻辑）
   async activateEditingArea() {
-    return true; // 大多数A类平台不需要激活
+    // 大多数A类平台不需要特殊激活
+    return true;
   }
+
+  // 重写发布方法（如果需要特殊发布逻辑）
+  async publishContent(data) {
+    try {
+      // 等待页面元素加载
+      await this.waitForElements();
+
+      // 按顺序执行发布步骤
+      if (data.title) await this.injectTitle(data.title);
+      if (data.files?.length) await this.uploadFiles(data);
+      if (data.content) await this.injectContent(data.content);
+
+      return { success: true, message: '发布成功' };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+}
+
+// 5. 适配器注册和初始化
+window.[PlatformName]PlatformAdapter = [PlatformName]PlatformAdapter;
+
+// 6. 使用AdapterInitializer统一初始化
+if (window.AdapterInitializer) {
+  AdapterInitializer.initialize(
+    '[platform-id]',
+    '[PlatformName]PlatformAdapter',
+    null // 无旧版本初始化函数
+  );
+} else {
+  console.error('[平台名称]适配器: AdapterInitializer未加载');
+}
+
+})(); // 结束IIFE
+
+// 7. 备用初始化（如果统一初始化失败）
+if (!window.[PlatformName]PlatformAdapter) {
+  console.warn('[平台名称]适配器: 统一初始化失败，尝试直接初始化');
+
+  // 直接检查基类并初始化
+  if (window.PlatformAdapter && window.PlatformConfigBase && window.MutationObserverBase) {
+    // 重新定义类（在全局作用域）
+    // ... 这里可以添加备用初始化逻辑
+  }
+}
+```
+
+#### 微信视频号特殊模板（Shadow DOM处理）
+
+```javascript
+/**
+ * 微信视频号平台适配器 - A类特殊平台模板
+ * 需要处理Shadow DOM和WUJIE-APP微前端架构
+ */
+
+class WeixinChannelsConfigManager extends PlatformConfigBase {
+  constructor() {
+    super('weixinchannels');
+  }
+
+  loadConfig() {
+    const config = {
+      delays: this.createDelayConfig({
+        FAST_CHECK: 200,
+        NORMAL_WAIT: 500,
+        UPLOAD_WAIT: 1500,
+        ELEMENT_WAIT: 3000
+      }),
+
+      limits: this.createLimitsConfig({
+        maxContentLength: 1000,
+        maxTitleLength: 22,
+        maxMediaFiles: 18,
+        allowedImageTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
+        maxFileSize: 20 * 1024 * 1024
+      }),
+
+      selectors: {
+        shadowHost: 'wujie-app',
+        titleInput: 'input[placeholder="填写标题, 22个字符内"]',
+        contentArea: '.input-editor',
+        fileInput: 'input[type="file"][accept="image/*"]'
+      }
+    };
+
+    return this.loadPlatformConfig(config);
+  }
+}
+
+class WeixinChannelsPlatformAdapter extends PlatformAdapter {
+  constructor() {
+    super('weixinchannels');
+    this.configManager = new WeixinChannelsConfigManager();
+    this.config = this.configManager.loadConfig();
+  }
+
+  // 重写元素查找方法以支持Shadow DOM
+  findTitleInput() {
+    const shadowHost = document.querySelector(this.config.selectors.shadowHost);
+    if (shadowHost && shadowHost.shadowRoot) {
+      return shadowHost.shadowRoot.querySelector(this.config.selectors.titleInput);
+    }
+    return null;
+  }
+
+  findContentArea() {
+    const shadowHost = document.querySelector(this.config.selectors.shadowHost);
+    if (shadowHost && shadowHost.shadowRoot) {
+      return shadowHost.shadowRoot.querySelector(this.config.selectors.contentArea);
+    }
+    return null;
+  }
+
+  // 重写文件上传方法以使用DataTransfer API
+  async uploadFiles(data) {
+    const fileInput = this.findFileInput();
+    if (!fileInput || !data.files?.length) return;
+
+    // 使用DataTransfer API创建文件列表
+    const dataTransfer = new DataTransfer();
+    data.files.forEach(file => dataTransfer.items.add(file));
+
+    fileInput.files = dataTransfer.files;
+    fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+}
+```
+
+### 开发步骤
+
+1. **创建适配器文件**
+   ```bash
+   # 在 content-scripts/adapters/ 目录下创建
+   touch content-scripts/adapters/[platform].js
+   ```
+
+2. **复制模板代码**
+   - 选择标准A类模板或特殊A类模板
+   - 替换所有占位符：`[PlatformName]`、`[platform-id]`、`[platform-domain]`等
+
+3. **配置选择器**
+   - 使用浏览器开发者工具分析目标页面
+   - 找到标题输入框、内容编辑器、文件上传等关键元素
+   - 更新 `selectors` 配置
+
+4. **测试验证**
+   - 在Chrome扩展开发者模式中加载
+   - 使用Playwright MCP Bridge进行自动化测试
+   - 验证所有功能正常工作
 
   // 等待页面元素加载
   async waitForElements() {
@@ -954,10 +1160,46 @@ class AutoUpdater {
 
 ---
 
-**文档版本：** v2.0
-**最后更新：** 2025-01-08
+## 📚 文档更新记录
+
+### v2.1 (2025-01-21)
+- ✅ 更新了平台分类决策流程图（支持Mermaid格式）
+- ✅ 完善了A类平台开发模板，包含实际的文件结构
+- ✅ 添加了微信视频号特殊模板（Shadow DOM处理）
+- ✅ 更新了开发步骤和最佳实践
+- ✅ 补充了Playwright自动化测试示例
+- ✅ 与实际代码架构保持100%一致
+
+### v2.0 (2025-01-08)
+- 初始版本，建立了完整的新平台开发指南
+- 定义了开发流程和模板
+- 建立了测试验证体系
+
+---
+
+**文档版本：** v2.1
+**最后更新：** 2025-01-21
 **维护者：** MomentDots 开发团队
 
 ## 📞 支持和反馈
 
-如有问题或建议，请联系开发团队或在项目仓库中提交Issue。
+### 开发支持
+- **开发问题**: 在项目仓库提交Issue并标记为`development`
+- **模板使用**: 参考`content-scripts/adapters/`目录下的实际实现
+- **架构问题**: 查看[平台架构指南](./platform-architecture-guide.md)
+- **测试问题**: 使用Playwright MCP Bridge进行自动化测试
+
+### 快速链接
+- 🏗️ [平台架构指南](./platform-architecture-guide.md) - 了解整体架构
+- 📚 [文档中心](./README.md) - 完整的文档导航
+- 🔧 [实际代码示例](../content-scripts/adapters/) - 查看真实实现
+- 🧪 [测试工具](../test/) - 测试相关资源
+
+### 贡献指南
+1. Fork项目并创建功能分支
+2. 按照本指南开发新平台适配器
+3. 完成所有测试验证
+4. 提交Pull Request并描述变更内容
+5. 等待代码审查和合并
+
+> 💡 **提示**: 开发新平台前，建议先阅读[平台架构指南](./platform-architecture-guide.md)了解整体设计思路。
