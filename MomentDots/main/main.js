@@ -1696,21 +1696,25 @@ function getAndValidateContent() {
 
     if (articleRichEditor) {
       let rawContent = articleRichEditor.innerHTML || '';
-      content = standardizeRichTextContent(rawContent);
 
-      // 验证内容
+      // 🔧 修复：为提示词优化提取纯文本内容
+      // 保留HTML格式用于发布，但提取纯文本用于提示词优化
       const tempDiv = document.createElement('div');
-      tempDiv.innerHTML = content;
+      tempDiv.innerHTML = rawContent;
       const textContent = tempDiv.textContent || tempDiv.innerText || '';
 
-      if (!textContent.trim()) {
+      // 🔧 修复：为提示词优化提取纯文本内容，同时保留HTML格式用于发布
+      content = textContent.trim();
+      appState.content = standardizeRichTextContent(rawContent);
+
+      if (!content) {
         isValid = false;
         message = '请输入文章内容';
       } else {
-        // 简化日志记录，避免冗余信息
-        console.log('📝 文章内容已标准化', {
-          textLength: textContent.trim().length,
-          hasRichContent: content.includes('<img') || content.includes('<a')
+        console.log('📝 文章内容已处理', {
+          textLength: content.length,
+          htmlLength: appState.content.length,
+          hasRichContent: appState.content.includes('<img') || appState.content.includes('<a')
         });
       }
     } else {
@@ -1765,6 +1769,34 @@ function standardizeRichTextContent(content) {
   } catch (error) {
     console.warn('富文本内容格式化失败:', error);
     return content; // 返回原始内容作为备用
+  }
+}
+
+/**
+ * 将纯文本内容转换为HTML格式（用于文章模式的优化后内容）
+ * @param {string} textContent - 纯文本内容
+ * @returns {string} HTML格式的内容
+ */
+function convertTextToHTML(textContent) {
+  if (!textContent || !textContent.trim()) {
+    return '<p></p>';
+  }
+
+  const trimmedContent = textContent.trim();
+
+  if (trimmedContent.includes('\n\n')) {
+    // 双换行分段
+    return trimmedContent
+      .split('\n\n')
+      .filter(paragraph => paragraph.trim())
+      .map(paragraph => `<p>${paragraph.trim().replace(/\n/g, '<br>')}</p>`)
+      .join('');
+  } else if (trimmedContent.includes('\n')) {
+    // 单换行处理
+    return `<p>${trimmedContent.replace(/\n/g, '<br>')}</p>`;
+  } else {
+    // 无换行，直接包装
+    return `<p>${trimmedContent}</p>`;
   }
 }
 
@@ -2457,18 +2489,33 @@ async function openSidepanelForPublish() {
 // AI内容优化功能 - 使用统一的优化服务
 async function optimizeContentWithPrompt(originalContent, promptName) {
   try {
+    // 🔧 修复：添加调试日志以验证文章模式的内容优化
+    console.log(`🤖 开始AI内容优化`, {
+      contentType: appState.currentContentType,
+      promptName: promptName,
+      contentLength: originalContent.length,
+      contentPreview: originalContent.substring(0, 100) + (originalContent.length > 100 ? '...' : '')
+    });
+
     // 使用ContentOptimizationService简化优化逻辑
     if (window.contentOptimizationService) {
-      return await window.contentOptimizationService.optimizeContent(originalContent, promptName);
+      const result = await window.contentOptimizationService.optimizeContent(originalContent, promptName);
+      console.log('✅ AI内容优化完成（服务模式）', {
+        originalLength: originalContent.length,
+        optimizedLength: result.length
+      });
+      return result;
     } else {
       // 降级到原有实现（保持兼容性）
-      console.log(`🤖 开始AI内容优化，提示词: ${promptName}`);
       const promptData = await getPromptByName(promptName);
       if (!promptData) {
         throw new Error(`未找到提示词: ${promptName}`);
       }
       const optimizedContent = await callAIOptimizationAPI(originalContent, promptData);
-      console.log('✅ AI内容优化完成');
+      console.log('✅ AI内容优化完成（API模式）', {
+        originalLength: originalContent.length,
+        optimizedLength: optimizedContent.length
+      });
       return optimizedContent;
     }
   } catch (error) {
@@ -2730,11 +2777,29 @@ async function createPublishDataFromValidated(validatedContent, useFileIds = fal
   const { content, title } = validatedContent;
   const platformsToUse = specificPlatforms || appState.selectedPlatforms;
 
-  // 同步到appState
-  appState.content = content;
-  appState.title = title;
+  // 🔧 修复：直接使用传入的内容，不要被appState干扰
+  // 对于优化后的内容，应该直接使用传入的content参数
+  let contentForPublish = content;
 
-  return await buildPublishDataStructure(title, content, useFileIds, platformsToUse);
+  // 🔧 重要修复：添加调试日志以追踪内容传递
+  console.log('📋 创建发布数据', {
+    contentType: appState.currentContentType,
+    platformCount: platformsToUse.length,
+    platforms: platformsToUse.map(p => p.name),
+    contentLength: contentForPublish.length,
+    contentPreview: contentForPublish.substring(0, 150) + (contentForPublish.length > 150 ? '...' : ''),
+    isOptimizedContent: validatedContent.isOptimized || false
+  });
+
+  // 同步到appState（确保标题正确更新）
+  appState.title = title;
+  // 🔧 重要：对于优化后的内容，也要更新appState.content以保持一致性
+  if (validatedContent.isOptimized) {
+    appState.content = contentForPublish;
+    console.log('📝 已更新appState.content为优化后的内容');
+  }
+
+  return await buildPublishDataStructure(title, contentForPublish, useFileIds, platformsToUse);
 }
 
 /**
@@ -2981,17 +3046,30 @@ async function optimizeAndPublishPlatform(contentValidation, platform, promptNam
   const platformName = platform.name;
 
   try {
-    console.log(`🔄 开始优化平台 ${platformName} 的内容，使用提示词: ${promptName}`);
-
     // 步骤1: 内容优化
+    console.log(`🔄 开始优化平台 ${platformName}`, {
+      promptName: promptName,
+      contentType: appState.currentContentType,
+      originalContentLength: contentValidation.content.length,
+      originalContentPreview: contentValidation.content.substring(0, 100) + '...'
+    });
+
     const optimizedContent = await optimizeContentWithPrompt(contentValidation.content, promptName);
+
+    console.log('✅ 内容优化完成', {
+      platform: platformName,
+      optimizedContentLength: optimizedContent.length,
+      optimizedContentPreview: optimizedContent.substring(0, 100) + '...',
+      contentChanged: optimizedContent !== contentValidation.content
+    });
 
     // 步骤2: 更新状态并准备发布数据
     updatePlatformOptimizationStatus(platform.id, 'publishing', '内容优化完成，正在发布...');
 
     const optimizedContentValidation = {
       ...contentValidation,
-      content: optimizedContent
+      content: optimizedContent,
+      isOptimized: true // 标记这是优化后的内容
     };
 
     // 步骤3: 执行发布
@@ -3007,11 +3085,44 @@ async function optimizeAndPublishPlatform(contentValidation, platform, promptNam
 
 // 发布优化后的内容
 async function publishOptimizedContent(contentValidation, platform) {
+  // 🔧 修复：确保优化后的内容正确处理文章模式
+  // 对于文章模式，优化后的内容是纯文本，需要转换为适合发布的格式
+  let processedContentValidation = {
+    ...contentValidation,
+    isOptimized: true // 标记这是优化后的内容
+  };
+
+  if (appState.currentContentType === '文章') {
+    // 将优化后的纯文本内容转换为HTML格式用于发布
+    const optimizedTextContent = contentValidation.content;
+    const htmlContent = convertTextToHTML(optimizedTextContent);
+
+    processedContentValidation.content = htmlContent;
+
+    console.log('📝 文章模式：优化后内容已转换为HTML格式', {
+      platform: platform.name,
+      originalTextLength: optimizedTextContent.length,
+      htmlLength: htmlContent.length,
+      paragraphCount: htmlContent.split('<p>').length - 1
+    });
+  }
+
   const publishData = await createPublishDataFromValidated(
-    contentValidation,
-    mainController,
+    processedContentValidation,
+    true, // 使用文件ID
     [platform]
   );
+
+  // 🔧 修复：添加详细的调试日志以追踪内容传递
+  console.log('📤 准备发布优化后的内容', {
+    platform: platform.name,
+    contentType: appState.currentContentType,
+    contentLength: processedContentValidation.content.length,
+    contentPreview: processedContentValidation.content.substring(0, 200) + '...',
+    publishDataTitle: publishData.title,
+    publishDataContentLength: publishData.content.length
+  });
+
   await executePublish(publishData);
 }
 
