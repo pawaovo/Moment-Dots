@@ -108,20 +108,14 @@
     }
 
     /**
-     * 日志输出（优化后）
+     * 日志输出 - 使用基类方法
      * @param {...any} args - 日志参数
      */
     log(...args) {
-      debugLog(...args);
-    }
-
-    /**
-     * 睡眠函数
-     * @param {number} ms - 毫秒数
-     * @returns {Promise}
-     */
-    sleep(ms) {
-      return new Promise(resolve => setTimeout(resolve, ms));
+      // 使用基类的log方法，但保持调试模式控制
+      if (DEBUG_MODE) {
+        super.log(...args);
+      }
     }
 
     /**
@@ -170,7 +164,7 @@
           this.log('✅ 编辑器已初始化');
           return true;
         }
-        await this.sleep(delays.FAST);
+        await this.delay(delays.FAST);
       }
 
       this.log('⚠️ 编辑器初始化超时');
@@ -190,7 +184,7 @@
           this.log(`🔍 查找新建创作按钮... (${attempt}/${maxAttempts})`);
 
           if (attempt > 1) {
-            await this.sleep(delays.NORMAL);
+            await this.delay(delays.NORMAL);
           }
 
           const button = this.findNewCreationButton();
@@ -198,14 +192,14 @@
             this.log('🖱️ 找到新建创作按钮，准备点击');
             button.click();
 
-            await this.sleep(delays.NAVIGATION);
+            await this.delay(delays.NAVIGATION);
             return await this.waitForEditor();
           }
 
           this.log(`⏳ 第${attempt}次尝试失败，${attempt < maxAttempts ? '等待后重试' : '放弃'}`);
 
         } catch (error) {
-          this.log(`❌ 第${attempt}次尝试出错:`, error.message);
+          this.logError(`第${attempt}次尝试出错`, error);
         }
       }
 
@@ -341,7 +335,7 @@
         return true;
 
       } catch (error) {
-        this.log('❌ 标题注入失败:', error);
+        this.logError('标题注入失败', error);
         return false;
       }
     }
@@ -374,12 +368,12 @@
         // 清空并注入内容
         editor.innerHTML = '';
         editor.focus();
-        await this.sleep(delays.FAST);
+        await this.delay(delays.FAST);
 
         return this.injectTextContent(editor, textContent);
 
       } catch (error) {
-        this.log('❌ 内容注入失败:', error.message);
+        this.logError('内容注入失败', error);
         return false;
       }
     }
@@ -450,11 +444,11 @@
 
           // 控制输入速度
           if (i % 10 === 0) {
-            await this.sleep(delays.FAST / 4);
+            await this.delay(delays.FAST / 4);
           }
         }
 
-        await this.sleep(delays.NORMAL);
+        await this.delay(delays.NORMAL);
         this.log('✅ 内容注入成功');
         return true;
 
@@ -465,7 +459,7 @@
         editor.textContent = textContent;
         editor.dispatchEvent(new Event('input', { bubbles: true }));
 
-        await this.sleep(delays.FAST);
+        await this.delay(delays.FAST);
         this.log('✅ 直接设置内容成功');
         return true;
       }
@@ -492,7 +486,7 @@
         }
 
         // 2. 等待页面加载并进入编辑模式
-        await this.sleep(delays.NAVIGATION);
+        await this.delay(delays.NAVIGATION);
 
         if (!this.isInEditMode()) {
           this.log('📝 进入编辑模式');
@@ -502,7 +496,7 @@
           }
         }
 
-        await this.sleep(delays.NORMAL);
+        await this.delay(delays.NORMAL);
         
         // 3. 注入内容
         this.log('📝 注入标题和内容');
@@ -523,7 +517,7 @@
         };
 
       } catch (error) {
-        this.log('❌ 发布失败:', error.message);
+        this.logError('小红书长文发布失败', error);
         return {
           success: false,
           error: error.message,
