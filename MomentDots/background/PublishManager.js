@@ -314,6 +314,11 @@
           name: '小红书',
           publishUrl: 'https://creator.xiaohongshu.com/new/home',
           color: 'bg-red-500'
+        },
+        'xiaohongshu-article': {
+          name: '小红书长文',
+          publishUrl: 'https://creator.xiaohongshu.com/publish/publish?from=tab_switch&target=article',
+          color: 'bg-red-500'
         }
       };
       

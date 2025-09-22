@@ -125,6 +125,17 @@ const ARTICLE_PLATFORMS = [
     editPagePattern: 'appmsg_edit_v2',
     supportsVideo: false,
     contentType: 'article'
+  },
+  {
+    id: 'xiaohongshu-article',
+    name: '小红书长文',
+    publishUrl: 'https://creator.xiaohongshu.com/publish/publish?from=tab_switch&target=article',
+    color: 'bg-red-500',
+    logoUrl: 'https://favicon.im/www.xiaohongshu.com',
+    domain: 'xiaohongshu.com',
+    supportsVideo: false,
+    contentType: 'article',
+    parentPlatform: 'xiaohongshu'
   }
 ];
 

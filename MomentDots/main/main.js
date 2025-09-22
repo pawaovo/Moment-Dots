@@ -121,7 +121,8 @@ const PLATFORM_LIMITS_CONFIG = {
   article: {
     'weibo-article': { title: 32, excerpt: 44, content: 50000 },    // 微博头条：标题32，概要44
     'bilibili-article': { title: 40, excerpt: null, content: 50000 }, // Bilibili专栏：标题40，无概要
-    'weixin-article': { title: 64, excerpt: null, content: 50000 }   // 微信公众号文章：标题64，无概要
+    'weixin-article': { title: 64, excerpt: null, content: 50000 },   // 微信公众号文章：标题64，无概要
+    'xiaohongshu-article': { title: 64, excerpt: null, content: 10000 } // 小红书长文：标题64，无概要，内容10000
   },
   // 短视频页面字数限制（标题|内容）
   video: {
@@ -1697,24 +1698,28 @@ function getAndValidateContent() {
     if (articleRichEditor) {
       let rawContent = articleRichEditor.innerHTML || '';
 
-      // 🔧 修复：为提示词优化提取纯文本内容
-      // 保留HTML格式用于发布，但提取纯文本用于提示词优化
+      // 🔧 修复：保留完整的HTML格式用于发布
+      const standardizedContent = standardizeRichTextContent(rawContent);
+
+      // 提取纯文本用于验证
       const tempDiv = document.createElement('div');
-      tempDiv.innerHTML = rawContent;
+      tempDiv.innerHTML = standardizedContent;
       const textContent = tempDiv.textContent || tempDiv.innerText || '';
 
-      // 🔧 修复：为提示词优化提取纯文本内容，同时保留HTML格式用于发布
-      content = textContent.trim();
-      appState.content = standardizeRichTextContent(rawContent);
+      // 🔧 关键修复：返回HTML格式的内容用于发布，而不是纯文本
+      content = standardizedContent;  // 返回HTML格式
+      appState.content = standardizedContent;  // 保持一致
 
-      if (!content) {
+      if (!textContent.trim()) {
         isValid = false;
         message = '请输入文章内容';
       } else {
         console.log('📝 文章内容已处理', {
-          textLength: content.length,
-          htmlLength: appState.content.length,
-          hasRichContent: appState.content.includes('<img') || appState.content.includes('<a')
+          textLength: textContent.length,
+          htmlLength: content.length,
+          hasRichContent: content.includes('<img') || content.includes('<a'),
+          hasImages: content.includes('<img'),
+          paragraphCount: (content.match(/<p[^>]*>/gi) || []).length
         });
       }
     } else {

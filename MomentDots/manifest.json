@@ -94,7 +94,8 @@
         "content-scripts/adapters/common/MutationObserverBase.js",
         "content-scripts/adapters/common/BaseClassLoader.js",
         "content-scripts/shared/PlatformConfigBase.js",
-        "content-scripts/adapters/xiaohongshu.js"
+        "content-scripts/adapters/xiaohongshu.js",
+        "content-scripts/adapters/xiaohongshu-article.js"
       ],
       "run_at": "document_idle"
     },

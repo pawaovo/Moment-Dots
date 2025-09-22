@@ -834,6 +834,16 @@ const SUPPORTED_PLATFORMS = [
     supportsVideo: true
   },
   {
+    id: 'xiaohongshu-article',
+    name: '小红书长文',
+    publishUrl: 'https://creator.xiaohongshu.com/publish/publish?from=tab_switch&target=article',
+    color: 'bg-red-500',
+    logoUrl: 'https://favicon.im/www.xiaohongshu.com',
+    domain: 'xiaohongshu.com',
+    supportsVideo: false,
+    contentType: 'article'
+  },
+  {
     id: 'jike',
     name: '即刻',
     publishUrl: 'https://web.okjike.com',
@@ -1104,6 +1114,7 @@ class TaskScheduler {
 
       const response = await chrome.tabs.sendMessage(tab.id, {
         action: 'publish',
+        platform: platform.id,
         data: content
       });
 
@@ -2095,8 +2106,22 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 
 function getPlatformFromUrl(url) {
   // 基于平台配置动态检测，避免硬编码
-  const platform = SUPPORTED_PLATFORMS.find(p => url.includes(p.domain));
-  return platform ? platform.id : null;
+  // 首先检查所有支持的平台（包括文章平台）
+  const allPlatforms = [...SUPPORTED_PLATFORMS];
+
+  console.log('[平台检测] 检测URL:', url);
+
+  // 优先检查更具体的URL模式（如小红书长文）
+  if (url.includes('creator.xiaohongshu.com/publish/publish') && url.includes('target=article')) {
+    console.log('[平台检测] 识别为小红书长文平台');
+    return 'xiaohongshu-article';
+  }
+
+  // 检查其他平台
+  const platform = allPlatforms.find(p => url.includes(p.domain));
+  const result = platform ? platform.id : null;
+  console.log('[平台检测] 识别结果:', result);
+  return result;
 }
 
 // 微信公众号标签页更新处理
@@ -2466,6 +2491,7 @@ function getPlatformNameById(platformId) {
   const platformNames = {
     'weibo': '微博',
     'xiaohongshu': '小红书',
+    'xiaohongshu-article': '小红书长文',
     'douyin': '抖音',
     'jike': '即刻',
     'bilibili': 'B站',

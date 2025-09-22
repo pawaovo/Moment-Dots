@@ -2574,7 +2574,17 @@ class XiaohongshuAdapter extends XiaohongshuDependencyManager.getFileProcessorBa
   // 监听来自background script的消息
   if (typeof chrome !== 'undefined' && chrome.runtime) {
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-      if (message.action === 'publish') {
+      // 只处理发给普通小红书平台的消息，避免与小红书长文冲突
+      if (message.action === 'publish' &&
+          (message.platform === 'xiaohongshu' || !message.platform)) {
+
+        // 如果当前页面是小红书长文页面，不处理消息
+        const currentUrl = window.location.href;
+        if (currentUrl.includes('target=article')) {
+          console.log('[小红书适配器] 检测到长文页面，跳过处理');
+          return false; // 不处理此消息
+        }
+
         // 检查适配器是否已创建
         if (!window.MomentDots?.xiaohongshuAdapter) {
           sendResponse({
@@ -2598,9 +2608,15 @@ class XiaohongshuAdapter extends XiaohongshuDependencyManager.getFileProcessorBa
   }
 
   // 初始化适配器 - 异步版本
-  initializeXiaohongshuAdapter().catch(error => {
-    console.error('小红书适配器异步初始化失败:', error);
-  });
+  // 检查当前页面是否为小红书长文页面，如果是则不初始化普通适配器
+  const currentUrl = window.location.href;
+  if (!currentUrl.includes('target=article')) {
+    initializeXiaohongshuAdapter().catch(error => {
+      console.error('小红书适配器异步初始化失败:', error);
+    });
+  } else {
+    console.log('[小红书适配器] 检测到长文页面，跳过普通适配器初始化');
+  }
 
 })();
 
