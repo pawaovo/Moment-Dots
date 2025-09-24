@@ -1,7 +1,7 @@
 {
   "name": "moment-dots-extension",
-  "version": "1.0.0",
-  "description": "动态发布助手 - 一键发布动态到微博、小红书、即刻、抖音",
+  "version": "0.1.1",
+  "description": "动态发布助手 - 一键发布动态到多个主流社交媒体平台",
   "main": "background/background.js",
   "scripts": {
     "build": "tsc",
